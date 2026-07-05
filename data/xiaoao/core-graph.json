@@ -1,0 +1,45 @@
+{
+  "project": {"id": "xiaoao", "title": "笑傲江湖"},
+  "chapters": [
+    {"id": "xiaoao:chapter:5", "number": 5, "title": "治傷"},
+    {"id": "xiaoao:chapter:10", "number": 10, "title": "傳劍"},
+    {"id": "xiaoao:chapter:22", "number": 22, "title": "脫困"},
+    {"id": "xiaoao:chapter:35", "number": 35, "title": "復仇"}
+  ],
+  "entities": [
+    {"id": "xiaoao:person:linghuchong", "type": "Person", "name": "令狐沖", "aliases": ["令狐冲"], "description": "华山派大弟子，后任恒山派掌门。"},
+    {"id": "xiaoao:person:yuebuqun", "type": "Person", "name": "嶽不群", "aliases": ["岳不群", "君子劍"], "description": "华山派掌门，令狐冲的师父。"},
+    {"id": "xiaoao:person:fengqingyang", "type": "Person", "name": "風清揚", "aliases": ["风清扬"], "description": "华山派剑宗前辈，向令狐冲传授独孤九剑。"},
+    {"id": "xiaoao:person:renyingying", "type": "Person", "name": "任盈盈", "aliases": ["盈盈", "聖姑"], "description": "任我行之女，日月神教圣姑。"},
+    {"id": "xiaoao:person:renwoxing", "type": "Person", "name": "任我行", "aliases": ["任教主"], "description": "日月神教教主，修炼吸星大法。"},
+    {"id": "xiaoao:person:dongfangbubai", "type": "Person", "name": "東方不敗", "aliases": ["东方不败", "東方教主"], "description": "日月神教教主，修炼葵花宝典。"},
+    {"id": "xiaoao:sect:huashan", "type": "Sect", "name": "華山派", "aliases": ["华山派"], "description": "五岳剑派之一。"},
+    {"id": "xiaoao:sect:sunmoon", "type": "Sect", "name": "日月神教", "aliases": ["魔教", "朝陽神教"], "description": "以黑木崖为总坛的江湖组织。"},
+    {"id": "xiaoao:martialart:dugu", "type": "Swordplay", "name": "獨孤九劍", "aliases": ["独孤九剑"], "description": "讲究料敌机先、无招胜有招的剑法。"},
+    {"id": "xiaoao:martialart:xixing", "type": "InternalSkill", "name": "吸星大法", "aliases": ["吸星神功"], "description": "能够吸取他人内力的内功。"},
+    {"id": "xiaoao:martialart:sunflower", "type": "InternalSkill", "name": "葵花寶典", "aliases": ["葵花宝典"], "description": "日月神教秘传武学。"},
+    {"id": "xiaoao:event:teaching-dugu", "type": "TeachingEvent", "name": "思過崖傳劍", "aliases": ["思过崖传剑"], "description": "风清扬在思过崖指点令狐冲独孤九剑。"}
+  ],
+  "facts": [
+    {"id": "xiaoao:fact:yue-master-linghu", "type": "MASTER_OF", "source_id": "xiaoao:person:yuebuqun", "target_id": "xiaoao:person:linghuchong", "evidence_ids": ["xiaoao:evidence:master"], "confidence": 1.0},
+    {"id": "xiaoao:fact:linghu-member-huashan", "type": "MEMBER_OF", "source_id": "xiaoao:person:linghuchong", "target_id": "xiaoao:sect:huashan", "evidence_ids": ["xiaoao:evidence:master"], "from_chapter": 1, "confidence": 1.0},
+    {"id": "xiaoao:fact:teaching-teacher", "type": "TEACHER", "source_id": "xiaoao:event:teaching-dugu", "target_id": "xiaoao:person:fengqingyang", "evidence_ids": ["xiaoao:evidence:instruction"], "confidence": 1.0},
+    {"id": "xiaoao:fact:teaching-student", "type": "STUDENT", "source_id": "xiaoao:event:teaching-dugu", "target_id": "xiaoao:person:linghuchong", "evidence_ids": ["xiaoao:evidence:instruction"], "confidence": 1.0},
+    {"id": "xiaoao:fact:teaching-subject", "type": "SUBJECT", "source_id": "xiaoao:event:teaching-dugu", "target_id": "xiaoao:martialart:dugu", "evidence_ids": ["xiaoao:evidence:dugu"], "confidence": 1.0},
+    {"id": "xiaoao:fact:linghu-knows-dugu", "type": "KNOWS", "source_id": "xiaoao:person:linghuchong", "target_id": "xiaoao:martialart:dugu", "evidence_ids": ["xiaoao:evidence:dugu"], "from_chapter": 10, "confidence": 1.0},
+    {"id": "xiaoao:fact:linghu-knows-xixing", "type": "KNOWS", "source_id": "xiaoao:person:linghuchong", "target_id": "xiaoao:martialart:xixing", "evidence_ids": ["xiaoao:evidence:xixing"], "from_chapter": 22, "confidence": 1.0},
+    {"id": "xiaoao:fact:ren-member-sunmoon", "type": "MEMBER_OF", "source_id": "xiaoao:person:renwoxing", "target_id": "xiaoao:sect:sunmoon", "evidence_ids": ["xiaoao:evidence:ren-leader"], "confidence": 1.0},
+    {"id": "xiaoao:fact:dongfang-knows-sunflower", "type": "KNOWS", "source_id": "xiaoao:person:dongfangbubai", "target_id": "xiaoao:martialart:sunflower", "evidence_ids": ["xiaoao:evidence:sunflower"], "confidence": 1.0},
+    {"id": "xiaoao:fact:renyingying-member-sunmoon", "type": "MEMBER_OF", "source_id": "xiaoao:person:renyingying", "target_id": "xiaoao:sect:sunmoon", "evidence_ids": ["xiaoao:evidence:renyingying"], "confidence": 0.95}
+  ],
+  "evidence": [
+    {"id": "xiaoao:evidence:master", "chapter_id": "xiaoao:chapter:5", "start_offset": 110355, "end_offset": 110379, "quote": "你是華山派掌門大弟子，‘君子劍’嶽先生的嫡派傳人", "text_hash": "3692916ba8337297a3b438ce1285ccac74cd298090a41a37fa2a5dd6f75b88ec"},
+    {"id": "xiaoao:evidence:dugu", "chapter_id": "xiaoao:chapter:10", "start_offset": 236289, "end_offset": 236304, "quote": "這獨孤九劍的總訣，你曾學過的？", "text_hash": "f81153bdce43584dabc5d96b68891427449444e2dbf0edb7343234d08f71e317"},
+    {"id": "xiaoao:evidence:instruction", "chapter_id": "xiaoao:chapter:10", "start_offset": 231716, "end_offset": 231722, "quote": "請太師叔指點", "text_hash": "dc138069e0952b07fd00c20f74b840b774dfa939b73ade91fc0f96876bb2af72"},
+    {"id": "xiaoao:evidence:xixing", "chapter_id": "xiaoao:chapter:22", "start_offset": 523101, "end_offset": 523119, "quote": "任教主的吸星神功，當世便只你一個傳人", "text_hash": "affb5991aec53906fec5726e03127d367fd2d77ff785987d18015cbb63987d69"},
+    {"id": "xiaoao:evidence:sunflower", "chapter_id": "xiaoao:chapter:22", "start_offset": 530514, "end_offset": 530531, "quote": "竟將本教的祕籍《葵花寶典》傳了給他", "text_hash": "54b05e7a3266de46917ce24dd995c49e0aaab6cb0c0dc04eeece187b9ddef454"},
+    {"id": "xiaoao:evidence:renyingying", "chapter_id": "xiaoao:chapter:35", "start_offset": 835526, "end_offset": 835543, "quote": "我是日月神教任教主之女，任盈盈便是", "text_hash": "db5b03864b5410d32ee27a856805865dab4909d5ada6c38e4400279e4b091a04"},
+    {"id": "xiaoao:evidence:ren-leader", "chapter_id": "xiaoao:chapter:22", "start_offset": 523162, "end_offset": 523175, "quote": "這一位便是日月神教的任教主", "text_hash": "c72953e765f43a35efaee42e412ba6675c0845520da4873cbce302cf5d912286"}
+  ]
+}
+

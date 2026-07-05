@@ -1,0 +1,80 @@
+from typing import Self
+
+from pydantic import BaseModel, Field, model_validator
+
+from app.ontology.models import EntityType, RelationType
+
+
+class ProjectRecord(BaseModel):
+    id: str
+    title: str
+
+
+class ChapterRecord(BaseModel):
+    id: str
+    number: int = Field(ge=1)
+    title: str
+
+
+class EntityRecord(BaseModel):
+    id: str
+    type: EntityType
+    name: str
+    aliases: list[str] = Field(default_factory=list)
+    description: str = ""
+
+
+class FactRecord(BaseModel):
+    id: str
+    type: RelationType
+    source_id: str
+    target_id: str
+    evidence_ids: list[str] = Field(min_length=1)
+    from_chapter: int | None = Field(default=None, ge=1)
+    to_chapter: int | None = Field(default=None, ge=1)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+
+
+class EvidenceRecord(BaseModel):
+    id: str
+    chapter_id: str
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(gt=0)
+    quote: str = Field(min_length=1, max_length=500)
+    text_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def offset_order(self) -> Self:
+        if self.end_offset <= self.start_offset:
+            raise ValueError("end_offset must be greater than start_offset")
+        return self
+
+
+class GraphDocument(BaseModel):
+    project: ProjectRecord
+    chapters: list[ChapterRecord]
+    entities: list[EntityRecord]
+    facts: list[FactRecord]
+    evidence: list[EvidenceRecord]
+
+    @model_validator(mode="after")
+    def references_exist(self) -> Self:
+        entity_ids = {item.id for item in self.entities}
+        chapter_ids = {item.id for item in self.chapters}
+        evidence_ids = {item.id for item in self.evidence}
+        for fact in self.facts:
+            if fact.source_id not in entity_ids or fact.target_id not in entity_ids:
+                raise ValueError(f"fact {fact.id} references an unknown entity")
+            if not set(fact.evidence_ids) <= evidence_ids:
+                raise ValueError(f"fact {fact.id} references unknown evidence")
+        for item in self.evidence:
+            if item.chapter_id not in chapter_ids:
+                raise ValueError(f"evidence {item.id} references an unknown chapter")
+        return self
+
+
+class ImportSummary(BaseModel):
+    created_entities: int = 0
+    created_facts: int = 0
+    created_evidence: int = 0
+

@@ -75,7 +75,7 @@ def upload_project(
     model_profile_id: Annotated[str, Form(min_length=1, max_length=100)],
     file: Annotated[UploadFile, File()],
 ) -> ProjectCreated:
-    if model_profile_id != "fixed:test":
+    if model_profile_id not in {profile.id for profile in get_settings().model_profiles}:
         raise HTTPException(422, detail={"code": "UNKNOWN_MODEL_PROFILE"})
     try:
         project = upload_service.create(

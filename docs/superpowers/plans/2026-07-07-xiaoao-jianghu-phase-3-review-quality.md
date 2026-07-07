@@ -1771,7 +1771,7 @@ git commit -m "feat: add review quality workspace"
 - Consumes: `POST /api/projects/{project_id}/review/items`.
 - Produces graph page manual review entry for facts and entities.
 
-- [ ] **Step 1: Write failing GraphPage manual review test**
+- [x] **Step 1: Write failing GraphPage manual review test**
 
 Modify `apps/web/src/features/graph/GraphPage.test.tsx` by adding:
 
@@ -1805,13 +1805,13 @@ it('adds a visible fact to the review queue', async () => {
 
 Use the existing helpers in `GraphPage.test.tsx`; if helper names differ, adapt the test to the current file's patterns.
 
-- [ ] **Step 2: Run GraphPage test and confirm failure**
+- [x] **Step 2: Run GraphPage test and confirm failure**
 
 Run: `npm --prefix apps/web test -- GraphPage --run`
 
 Expected: FAIL because `加入审核` button is missing.
 
-- [ ] **Step 3: Add manual review callback**
+- [x] **Step 3: Add manual review callback**
 
 Modify `apps/web/src/features/graph/EntityPanel.tsx` props:
 
@@ -1845,13 +1845,13 @@ function reviewFact(factId: string) {
 <EntityPanel detail={detail} onClose={() => setDetail(undefined)} onReviewFact={reviewFact} />
 ```
 
-- [ ] **Step 4: Run graph frontend tests**
+- [x] **Step 4: Run graph frontend tests**
 
 Run: `npm --prefix apps/web test -- GraphPage --run`
 
 Expected: PASS.
 
-- [ ] **Step 5: Add backend router regression for bounded graph filters**
+- [x] **Step 5: Add backend router regression for bounded graph filters**
 
 Modify `apps/api/tests/graph/test_router.py` to assert rejected review status does not leak through router responses if fixture setup supports status mutation. Add a focused test around the repository/service boundary if router fixture does not use Neo4j.
 
@@ -1861,13 +1861,13 @@ Use this assertion shape:
 assert all(edge["id"] != "fact-rejected" for edge in response.json()["edges"])
 ```
 
-- [ ] **Step 6: Run graph and QA regression tests**
+- [x] **Step 6: Run graph and QA regression tests**
 
 Run: `.venv/bin/python -m pytest apps/api/tests/graph apps/api/tests/qa -v`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/features/graph apps/api/tests/graph/test_router.py

@@ -73,3 +73,6 @@ CATALOG = OntologyCatalog(
     example=TripleExample(subject="令狐冲", predicate=R.KNOWS, object="独孤九剑"),
 )
 
+
+def relation_by_id(relation_id: str) -> Relation | None:
+    return next((item for item in CATALOG.relation_types if item.id == relation_id), None)

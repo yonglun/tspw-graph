@@ -1524,7 +1524,7 @@ git commit -m "feat: expose review workflow APIs"
 - Consumes review endpoints from Task 5.
 - Produces route `/review`.
 
-- [ ] **Step 1: Write failing ReviewPage test**
+- [x] **Step 1: Write failing ReviewPage test**
 
 Create `apps/web/src/features/review/ReviewPage.test.tsx`:
 
@@ -1586,13 +1586,13 @@ describe('ReviewPage', () => {
 })
 ```
 
-- [ ] **Step 2: Run frontend test and confirm failure**
+- [x] **Step 2: Run frontend test and confirm failure**
 
 Run: `npm --prefix apps/web test -- ReviewPage --run`
 
 Expected: FAIL because `ReviewPage` does not exist.
 
-- [ ] **Step 3: Add review API types**
+- [x] **Step 3: Add review API types**
 
 Modify `apps/web/src/api/client.ts`:
 
@@ -1630,7 +1630,7 @@ export type ReviewActionRequest = {
 export type ReviewAction = { id: string; reviewer: string; action_type: string; payload: Record<string, string>; created_at: string }
 ```
 
-- [ ] **Step 4: Implement review components**
+- [x] **Step 4: Implement review components**
 
 Create `apps/web/src/features/review/ReviewSummary.tsx`:
 
@@ -1720,7 +1720,7 @@ export function ReviewPage() {
 }
 ```
 
-- [ ] **Step 5: Wire route and navigation**
+- [x] **Step 5: Wire route and navigation**
 
 Modify `apps/web/src/app/router.tsx`:
 
@@ -1738,19 +1738,19 @@ Modify `apps/web/src/App.tsx` navigation links to include:
 
 Use the existing `NavLink` style and placement pattern in `App.tsx`.
 
-- [ ] **Step 6: Run frontend review tests**
+- [x] **Step 6: Run frontend review tests**
 
 Run: `npm --prefix apps/web test -- ReviewPage --run`
 
 Expected: PASS.
 
-- [ ] **Step 7: Run frontend suite**
+- [x] **Step 7: Run frontend suite**
 
 Run: `npm --prefix apps/web test -- --run && npm --prefix apps/web run typecheck`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/web/src/api/client.ts apps/web/src/app/router.tsx apps/web/src/App.tsx apps/web/src/features/review

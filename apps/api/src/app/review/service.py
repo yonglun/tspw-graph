@@ -37,6 +37,22 @@ class ReviewService:
         elif request.action_type == ReviewActionType.REJECT_FACT:
             fact_id = self._payload_value(request.payload, "fact_id")
             self.graph.reject_fact(project_id, fact_id)
+        elif request.action_type == ReviewActionType.MERGE_ENTITIES:
+            source_entity_id = self._payload_value(request.payload, "source_entity_id")
+            target_entity_id = self._payload_value(request.payload, "target_entity_id")
+            if source_entity_id == target_entity_id:
+                raise ValueError("merge_same_entity")
+            self.graph.merge_entities(project_id, source_entity_id, target_entity_id)
+        elif request.action_type == ReviewActionType.SPLIT_ALIAS:
+            source_entity_id = self._payload_value(request.payload, "source_entity_id")
+            alias = self._payload_value(request.payload, "alias")
+            target_entity_id = request.payload.get("target_entity_id")
+            if target_entity_id is not None and not isinstance(target_entity_id, str):
+                raise ValueError("invalid_payload:target_entity_id")
+            created_entity_id = self.graph.split_alias(
+                project_id, source_entity_id, alias, target_entity_id
+            )
+            request.payload["created_entity_id"] = created_entity_id
         elif request.action_type == ReviewActionType.DISMISS_ITEM:
             pass
         else:

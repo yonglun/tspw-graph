@@ -649,7 +649,7 @@ git commit -m "feat: add review queue models and rules"
   - `ReviewGraphRepository.split_alias(project_id: str, source_entity_id: str, alias: str, target_entity_id: str | None) -> str`
   - `ReviewGraphRepository.review_candidates(project_id: str) -> ReviewGraphSnapshot`
 
-- [ ] **Step 1: Write failing graph filter tests**
+- [x] **Step 1: Write failing graph filter tests**
 
 Create `apps/api/tests/graph/test_review_filters.py`:
 
@@ -708,13 +708,13 @@ def test_rejected_fact_is_hidden_from_default_graph(settings: Settings):
     assert all(row["id"] != "fact-master" for row in after["rows"])
 ```
 
-- [ ] **Step 2: Run graph filter test and confirm failure**
+- [x] **Step 2: Run graph filter test and confirm failure**
 
 Run: `RUN_NEO4J_INTEGRATION=1 .venv/bin/python -m pytest apps/api/tests/graph/test_review_filters.py -v`
 
 Expected: FAIL because `app.review.graph` does not exist or repository does not filter rejected facts.
 
-- [ ] **Step 3: Implement ReviewGraphRepository**
+- [x] **Step 3: Implement ReviewGraphRepository**
 
 Create `apps/api/src/app/review/graph.py`:
 
@@ -837,7 +837,7 @@ class ReviewGraphRepository:
             session.run(statement, **parameters).consume()
 ```
 
-- [ ] **Step 4: Filter rejected facts and merged entities in graph repository**
+- [x] **Step 4: Filter rejected facts and merged entities in graph repository**
 
 Modify every Cypher query in `apps/api/src/app/graph/repository.py` that returns default graph data:
 
@@ -861,13 +861,13 @@ WHERE all(r IN rels WHERE coalesce(r.review_status, 'ACCEPTED') <> 'REJECTED'
 
 If current graph edges are `RELATED` relationships while facts are separate `Fact` nodes, keep both safe: set `review_status` on both `Fact` nodes and corresponding `RELATED` relationships when applying review actions.
 
-- [ ] **Step 5: Run graph filter tests**
+- [x] **Step 5: Run graph filter tests**
 
 Run: `RUN_NEO4J_INTEGRATION=1 .venv/bin/python -m pytest apps/api/tests/graph/test_review_filters.py apps/api/tests/graph/test_live_api.py apps/api/tests/graph/test_service.py -v`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/src/app/review/graph.py apps/api/src/app/graph/repository.py apps/api/src/app/graph/models.py apps/api/tests/graph/test_review_filters.py

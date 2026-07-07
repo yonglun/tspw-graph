@@ -49,7 +49,11 @@ class GraphService:
         )
         return Neighborhood(
             nodes=[EntitySummary.model_validate(row) for row in result["nodes"]],
-            edges=[GraphEdge.model_validate(row) for row in result["edges"]],
+            edges=[
+                GraphEdge.model_validate(row)
+                for row in result["edges"]
+                if row.get("review_status") != "REJECTED"
+            ],
         )
 
     def shortest_path(

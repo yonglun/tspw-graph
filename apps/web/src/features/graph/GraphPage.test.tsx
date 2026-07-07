@@ -51,4 +51,62 @@ describe('GraphPage', () => {
     expect(await screen.findByRole('button', { name: /令狐沖/ })).toBeVisible()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  it('adds a visible fact to the review queue', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/api/entities/linghu')) {
+        return new Response(JSON.stringify({
+          id: 'linghu',
+          project_id: 'xiaoao',
+          type: 'Person',
+          name: '令狐冲',
+          aliases: [],
+          description: '华山弟子',
+          facts: [{
+            id: 'fact-1',
+            type: 'MASTER_OF',
+            source_id: 'yue',
+            target_id: 'linghu',
+            evidence: [{
+              id: 'ev-1',
+              chapter_id: 'c1',
+              chapter_number: 1,
+              chapter_title: '第一章',
+              start_offset: 0,
+              end_offset: 4,
+              quote: '岳不群传剑',
+            }],
+          }],
+        }))
+      }
+      if (url.includes('/api/graph/neighborhood')) return new Response(JSON.stringify({ nodes: [], edges: [] }))
+      if (url.includes('/api/projects/xiaoao/review/items') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'review-1' }))
+      }
+      if (url.includes('/api/graph/search')) {
+        return new Response(JSON.stringify([{
+          id: 'linghu',
+          project_id: 'xiaoao',
+          type: 'Person',
+          name: '令狐冲',
+          aliases: [],
+          description: '华山弟子',
+        }]))
+      }
+      return new Response(JSON.stringify({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByText('令狐冲'))
+    await user.click(await screen.findByRole('button', { name: '加入审核' }))
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/projects/xiaoao/review/items'),
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
 })

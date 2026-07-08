@@ -1,4 +1,5 @@
 import json
+import logging
 
 import httpx
 from pydantic import ValidationError
@@ -9,6 +10,14 @@ from app.extraction.models import (
     strict_extraction_schema,
 )
 from app.extraction.providers import ProviderError, ProviderErrorKind
+
+
+logger = logging.getLogger(__name__)
+
+
+def _response_excerpt(response: httpx.Response, limit: int = 1000) -> str:
+    text = response.text.replace("\n", "\\n")
+    return text[:limit]
 
 
 class AzureOpenAIProvider:
@@ -69,6 +78,12 @@ class AzureOpenAIProvider:
                 if error.response.status_code == 429
                 or error.response.status_code >= 500
                 else ProviderErrorKind.CONFIGURATION
+            )
+            logger.warning(
+                "Azure OpenAI HTTP error status=%s deployment=%s response=%s",
+                error.response.status_code,
+                self.deployment,
+                _response_excerpt(error.response),
             )
             raise ProviderError(kind, f"MODEL_HTTP_{error.response.status_code}") from error
         except httpx.HTTPError as error:

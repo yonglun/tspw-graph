@@ -21,8 +21,8 @@ class CandidateEntity(BaseModel):
 class CandidateEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
     start: int = Field(ge=0)
-    end: int = Field(gt=0)
-    quote: str = Field(min_length=1, max_length=500)
+    end: int = Field(ge=0)
+    quote: str = Field(max_length=500)
 
 
 class CandidateFact(BaseModel):

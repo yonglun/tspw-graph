@@ -42,6 +42,25 @@ def test_extraction_result_accepts_model_generated_local_ids_with_chinese():
     assert result.facts[0].source_local_id == "entity_person_令狐冲"
 
 
+def test_extraction_result_accepts_empty_model_evidence_for_downstream_rejection():
+    result = ExtractionResult.model_validate(
+        {
+            "entities": [],
+            "facts": [
+                {
+                    "relation": "KNOWS",
+                    "source_local_id": "a",
+                    "target_local_id": "b",
+                    "evidence": {"start": 0, "end": 0, "quote": ""},
+                    "confidence": 0.5,
+                }
+            ],
+        }
+    )
+    assert result.facts[0].evidence.end == 0
+    assert result.facts[0].evidence.quote == ""
+
+
 def test_evidence_offsets_and_quote_must_match_chunk():
     result = ExtractionResult.model_validate(
         {

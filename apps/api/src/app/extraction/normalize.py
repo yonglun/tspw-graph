@@ -28,6 +28,8 @@ def _stable_id(*parts: str) -> str:
 
 
 def _aligned_evidence_range(chunk_text: str, start: int, end: int, quote: str) -> tuple[int, int] | None:
+    if not quote:
+        return None
     if start < end and end <= len(chunk_text) and chunk_text[start:end] == quote:
         return start, end
 

@@ -16,6 +16,32 @@ def test_extraction_result_rejects_excessive_entities():
         ExtractionResult.model_validate(payload)
 
 
+def test_extraction_result_accepts_model_generated_local_ids_with_chinese():
+    result = ExtractionResult.model_validate(
+        {
+            "entities": [
+                {
+                    "local_id": "entity_person_令狐冲",
+                    "name": "令狐冲",
+                    "type": "Person",
+                    "aliases": [],
+                }
+            ],
+            "facts": [
+                {
+                    "relation": "KNOWS",
+                    "source_local_id": "entity_person_令狐冲",
+                    "target_local_id": "entity_person_岳灵珊",
+                    "evidence": {"start": 0, "end": 3, "quote": "令狐冲"},
+                    "confidence": 0.9,
+                }
+            ],
+        }
+    )
+    assert result.entities[0].local_id == "entity_person_令狐冲"
+    assert result.facts[0].source_local_id == "entity_person_令狐冲"
+
+
 def test_evidence_offsets_and_quote_must_match_chunk():
     result = ExtractionResult.model_validate(
         {

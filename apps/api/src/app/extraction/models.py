@@ -28,8 +28,8 @@ class CandidateEvidence(BaseModel):
 class CandidateFact(BaseModel):
     model_config = ConfigDict(extra="forbid")
     relation: str = Field(min_length=1, max_length=50)
-    source_local_id: str = Field(min_length=1, max_length=100)
-    target_local_id: str = Field(min_length=1, max_length=100)
+    source_local_id: str = Field(max_length=100)
+    target_local_id: str = Field(max_length=100)
     evidence: CandidateEvidence
     confidence: float = Field(default=1.0, ge=0, le=1)
 

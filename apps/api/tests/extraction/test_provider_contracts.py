@@ -164,6 +164,40 @@ def test_azure_openai_provider_preserves_retry_after_from_rate_limit():
     assert caught.value.retry_after_seconds == 1.2
 
 
+def test_azure_openai_provider_accepts_blank_fact_endpoint_for_normalization():
+    content = json.dumps(
+        {
+            "entities": [
+                {"local_id": "p1", "name": "令狐冲", "type": "Person", "aliases": []}
+            ],
+            "facts": [
+                {
+                    "relation": "ALLY_OF",
+                    "source_local_id": "",
+                    "target_local_id": "p1",
+                    "evidence": {"start": 0, "end": 3, "quote": "令狐冲"},
+                    "confidence": 0.3,
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = AzureOpenAIProvider(
+        base_url="https://example.openai.azure.com",
+        deployment="kg-extractor",
+        api_version="2025-01-01-preview",
+        api_key="azure-secret",
+        client=client,
+    ).extract(request())
+
+    assert result.facts[0].source_local_id == ""
+
+
 def test_ollama_provider_uses_non_streaming_schema_format():
     captured = {}
 

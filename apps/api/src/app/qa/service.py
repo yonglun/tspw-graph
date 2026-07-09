@@ -17,12 +17,11 @@ class QaService:
         if intent is None:
             return self._empty(project_id)
 
-        matches = self.repository.search(
-            project_id, subject_text(question), ["Person"], 5
-        )
-        if len(matches) != 1:
+        subject = subject_text(question)
+        matches = self.repository.search(project_id, subject, ["Person"], 5)
+        entity = self._resolve_subject(matches, subject)
+        if entity is None:
             return self._empty(project_id)
-        entity = matches[0]
 
         if intent == "introduction":
             description = entity.get("description", "").strip()
@@ -93,6 +92,30 @@ class QaService:
         if intent == "martial_art":
             return f"{entity_name}掌握{related_name}。"
         return f"{entity_name}隶属于{related_name}。"
+
+    def _resolve_subject(
+        self, matches: list[dict[str, Any]], subject: str
+    ) -> dict[str, Any] | None:
+        exact_name = [item for item in matches if item.get("name") == subject]
+        if len(exact_name) == 1:
+            return exact_name[0]
+
+        exact_alias = [
+            item
+            for item in matches
+            if subject
+            in {
+                alias
+                for alias in item.get("aliases", [])
+                if isinstance(alias, str)
+            }
+        ]
+        if len(exact_alias) == 1:
+            return exact_alias[0]
+
+        if len(matches) == 1:
+            return matches[0]
+        return None
 
     def _empty(self, project_id: str) -> AskResponse:
         return AskResponse(

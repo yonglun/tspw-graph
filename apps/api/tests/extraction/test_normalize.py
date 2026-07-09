@@ -122,3 +122,25 @@ def test_normalizer_rejects_blank_fact_endpoint_without_failing_chunk():
     assert normalized.facts == []
     assert normalized.evidence == []
     assert normalized.rejections[0].code == "UNKNOWN_FACT_ENTITY"
+
+
+def test_normalizer_rejects_blank_entity_name_without_failing_chunk():
+    chunk = TextChunk("c1", 1, 100, 103, "甲识乙")
+    result = ExtractionResult.model_validate({
+        "entities": [
+            {"local_id": "a", "name": "", "type": "Person"},
+            {"local_id": "b", "name": "乙", "type": "Person"},
+        ],
+        "facts": [{
+            "relation": "ALLY_OF", "source_local_id": "a", "target_local_id": "b",
+            "evidence": {"start": 0, "end": 3, "quote": "甲识乙"}
+        }],
+    })
+    normalized = normalize_chunk_result("p-1", chunk, result)
+    assert [entity.name for entity in normalized.entities] == ["乙"]
+    assert normalized.facts == []
+    assert normalized.evidence == []
+    assert [rejection.code for rejection in normalized.rejections] == [
+        "EMPTY_ENTITY_NAME",
+        "UNKNOWN_FACT_ENTITY",
+    ]

@@ -12,9 +12,9 @@ class ExtractionRequest(BaseModel):
 
 class CandidateEntity(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    local_id: str = Field(min_length=1, max_length=100)
-    name: str = Field(min_length=1, max_length=100)
-    type: str = Field(min_length=1, max_length=50)
+    local_id: str = Field(max_length=100)
+    name: str = Field(max_length=100)
+    type: str = Field(max_length=50)
     aliases: list[str] = Field(default_factory=list, max_length=20)
 
 
@@ -27,7 +27,7 @@ class CandidateEvidence(BaseModel):
 
 class CandidateFact(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    relation: str = Field(min_length=1, max_length=50)
+    relation: str = Field(max_length=50)
     source_local_id: str = Field(max_length=100)
     target_local_id: str = Field(max_length=100)
     evidence: CandidateEvidence

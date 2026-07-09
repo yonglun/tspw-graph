@@ -51,6 +51,7 @@ def extraction_system_prompt(request: ExtractionRequest) -> str:
             "关系类型和方向规则：",
             *relations,
             "抽取要求：",
+            "- 实体 name 必须是文本中出现的非空名称；不确定名称时不要输出该实体。",
             "- 如果文本说“X的师父是Y”，输出 MASTER_OF: Y -> X。",
             "- 如果文本说“Y是X的师父”，输出 MASTER_OF: Y -> X。",
             "- 如果文本说“X是Y的妻子/夫人”或“Y的妻子是X”，输出 SPOUSE_OF: X -> Y。",

@@ -84,6 +84,31 @@ def test_extraction_result_accepts_overlong_model_evidence_for_downstream_reject
     assert result.facts[0].evidence.quote == long_quote
 
 
+def test_extraction_result_accepts_blank_entity_fields_for_downstream_rejection():
+    result = ExtractionResult.model_validate(
+        {
+            "entities": [
+                {"local_id": "a", "name": "", "type": "Person", "aliases": []},
+                {"local_id": "", "name": "乙", "type": "Person", "aliases": []},
+                {"local_id": "c", "name": "丙", "type": "", "aliases": []},
+            ],
+            "facts": [
+                {
+                    "relation": "",
+                    "source_local_id": "a",
+                    "target_local_id": "b",
+                    "evidence": {"start": 0, "end": 1, "quote": "甲"},
+                    "confidence": 0.5,
+                }
+            ],
+        }
+    )
+    assert result.entities[0].name == ""
+    assert result.entities[1].local_id == ""
+    assert result.entities[2].type == ""
+    assert result.facts[0].relation == ""
+
+
 def test_evidence_offsets_and_quote_must_match_chunk():
     result = ExtractionResult.model_validate(
         {

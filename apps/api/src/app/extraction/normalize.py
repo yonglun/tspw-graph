@@ -49,34 +49,49 @@ def normalize_chunk_result(
     normalized = NormalizedChunk()
     local_ids: dict[str, str] = {}
     for candidate in result.entities:
+        local_id = candidate.local_id.strip()
+        name = candidate.name.strip()
+        entity_type_text = candidate.type.strip()
+        if not local_id:
+            normalized.rejections.append(Rejection("EMPTY_ENTITY_LOCAL_ID"))
+            continue
+        if not name:
+            normalized.rejections.append(Rejection("EMPTY_ENTITY_NAME"))
+            continue
+        if not entity_type_text:
+            normalized.rejections.append(Rejection("EMPTY_ENTITY_TYPE"))
+            continue
         try:
-            entity_type = EntityType(candidate.type)
+            entity_type = EntityType(entity_type_text)
         except ValueError:
             normalized.rejections.append(
-                Rejection("UNKNOWN_ENTITY_TYPE", candidate.type)
+                Rejection("UNKNOWN_ENTITY_TYPE", entity_type_text)
             )
             continue
-        entity_id = f"{project_id}:{entity_type.value}:{_stable_id(candidate.name)}"
-        local_ids[candidate.local_id] = entity_id
+        entity_id = f"{project_id}:{entity_type.value}:{_stable_id(name)}"
+        local_ids[local_id] = entity_id
         normalized.entities.append(
             EntityRecord(
                 id=entity_id,
                 type=entity_type,
-                name=candidate.name.strip(),
-                aliases=sorted(set(candidate.aliases)),
+                name=name,
+                aliases=sorted(
+                    set(alias.strip() for alias in candidate.aliases if alias.strip())
+                ),
             )
         )
 
     for candidate in result.facts:
+        relation_text = candidate.relation.strip()
         try:
-            relation = RelationType(candidate.relation)
+            relation = RelationType(relation_text)
         except ValueError:
             normalized.rejections.append(
-                Rejection("UNKNOWN_RELATION_TYPE", candidate.relation)
+                Rejection("UNKNOWN_RELATION_TYPE", relation_text)
             )
             continue
-        source_id = local_ids.get(candidate.source_local_id)
-        target_id = local_ids.get(candidate.target_local_id)
+        source_id = local_ids.get(candidate.source_local_id.strip())
+        target_id = local_ids.get(candidate.target_local_id.strip())
         if not source_id or not target_id:
             normalized.rejections.append(Rejection("UNKNOWN_FACT_ENTITY"))
             continue

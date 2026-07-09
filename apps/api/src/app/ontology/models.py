@@ -25,6 +25,7 @@ class EntityType(StrEnum):
 class RelationType(StrEnum):
     MEMBER_OF = "MEMBER_OF"
     MASTER_OF = "MASTER_OF"
+    SPOUSE_OF = "SPOUSE_OF"
     KIN_OF = "KIN_OF"
     ALLY_OF = "ALLY_OF"
     ENEMY_OF = "ENEMY_OF"
@@ -69,4 +70,3 @@ class OntologyCatalog(FrozenModel):
     entity_types: tuple[EntityTypeDefinition, ...]
     relation_types: tuple[RelationTypeDefinition, ...]
     example: TripleExample
-

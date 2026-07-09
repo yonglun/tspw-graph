@@ -59,6 +59,7 @@ CATALOG = OntologyCatalog(
     relation_types=(
         relation(R.MEMBER_OF, "隶属", "人物隶属于组织", (E.PERSON,), (E.ORGANIZATION,), temporal=True),
         relation(R.MASTER_OF, "师父", "人物是另一人物的师父", (E.PERSON,), (E.PERSON,)),
+        relation(R.SPOUSE_OF, "配偶", "人物之间的夫妻、丈夫、妻子或夫人关系", (E.PERSON,), (E.PERSON,), symmetric=True),
         relation(R.KIN_OF, "亲属", "人物之间的亲属关系", (E.PERSON,), (E.PERSON,), symmetric=True),
         relation(R.ALLY_OF, "盟友", "人物或组织之间的盟友关系", (E.PERSON, E.ORGANIZATION), (E.PERSON, E.ORGANIZATION), symmetric=True, temporal=True),
         relation(R.ENEMY_OF, "敌对", "人物或组织之间的敌对关系", (E.PERSON, E.ORGANIZATION), (E.PERSON, E.ORGANIZATION), symmetric=True, temporal=True),

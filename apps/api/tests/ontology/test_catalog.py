@@ -19,6 +19,12 @@ def test_catalog_contains_tbox_and_abox_example(client: TestClient) -> None:
     )
     assert knows["source_types"] == ["Person"]
     assert knows["target_types"] == ["MartialArt"]
+    spouse = next(
+        item for item in body["relation_types"] if item["id"] == "SPOUSE_OF"
+    )
+    assert spouse["source_types"] == ["Person"]
+    assert spouse["target_types"] == ["Person"]
+    assert spouse["symmetric"] is True
     assert body["example"] == {
         "subject": "令狐冲",
         "predicate": "KNOWS",

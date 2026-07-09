@@ -11,6 +11,7 @@ from app.extraction.providers import (
     ProviderError,
     ProviderErrorKind,
 )
+from app.extraction.rules import rule_based_extract
 from app.extraction.splitter import split_document
 from app.graph.importer import GraphImporter
 from app.graph.models import (
@@ -113,6 +114,7 @@ class ExtractionPipeline:
                 rejections.update([error.code])
                 continue
             successful_chunks += 1
+            extracted = rule_based_extract(chunk, extracted)
             normalized = normalize_chunk_result(project_id, chunk, extracted)
             entities.update((item.id, item) for item in normalized.entities)
             evidence.update((item.id, item) for item in normalized.evidence)

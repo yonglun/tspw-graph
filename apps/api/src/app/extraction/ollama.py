@@ -4,6 +4,7 @@ import httpx
 from pydantic import ValidationError
 
 from app.extraction.models import ExtractionRequest, ExtractionResult
+from app.extraction.prompting import extraction_system_prompt
 from app.extraction.providers import (
     ProviderError,
     ProviderErrorKind,
@@ -33,8 +34,16 @@ class OllamaProvider:
                 json={
                     "model": self.model,
                     "messages": [
-                        {"role": "system", "content": "Extract only supported knowledge graph facts."},
-                        {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
+                        {
+                            "role": "system",
+                            "content": extraction_system_prompt(request),
+                        },
+                        {
+                            "role": "user",
+                            "content": json.dumps(
+                                request.model_dump(), ensure_ascii=False
+                            ),
+                        },
                     ],
                     "stream": False,
                     "format": ExtractionResult.model_json_schema(),
@@ -46,7 +55,12 @@ class OllamaProvider:
             result = ExtractionResult.model_validate_json(content)
             return result
         except httpx.HTTPStatusError as error:
-            kind = ProviderErrorKind.RETRYABLE if error.response.status_code == 429 or error.response.status_code >= 500 else ProviderErrorKind.CONFIGURATION
+            kind = (
+                ProviderErrorKind.RETRYABLE
+                if error.response.status_code == 429
+                or error.response.status_code >= 500
+                else ProviderErrorKind.CONFIGURATION
+            )
             raise ProviderError(
                 kind,
                 f"MODEL_HTTP_{error.response.status_code}",
@@ -55,4 +69,6 @@ class OllamaProvider:
         except httpx.HTTPError as error:
             raise ProviderError(ProviderErrorKind.RETRYABLE, "MODEL_NETWORK_ERROR") from error
         except (KeyError, TypeError, ValueError, ValidationError) as error:
-            raise ProviderError(ProviderErrorKind.INVALID_RESPONSE, "MODEL_RESPONSE_INVALID") from error
+            raise ProviderError(
+                ProviderErrorKind.INVALID_RESPONSE, "MODEL_RESPONSE_INVALID"
+            ) from error

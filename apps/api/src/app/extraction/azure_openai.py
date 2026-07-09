@@ -9,6 +9,7 @@ from app.extraction.models import (
     ExtractionResult,
     strict_extraction_schema,
 )
+from app.extraction.prompting import extraction_system_prompt
 from app.extraction.providers import (
     ProviderError,
     ProviderErrorKind,
@@ -65,7 +66,7 @@ class AzureOpenAIProvider:
                     "messages": [
                         {
                             "role": "system",
-                            "content": "Extract only facts supported by the supplied text and return JSON.",
+                            "content": extraction_system_prompt(request),
                         },
                         {
                             "role": "user",

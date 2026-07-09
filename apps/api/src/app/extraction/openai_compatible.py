@@ -8,6 +8,7 @@ from app.extraction.models import (
     ExtractionResult,
     strict_extraction_schema,
 )
+from app.extraction.prompting import extraction_system_prompt
 from app.extraction.providers import (
     ProviderError,
     ProviderErrorKind,
@@ -40,8 +41,16 @@ class OpenAICompatibleProvider:
                 json={
                     "model": self.model,
                     "messages": [
-                        {"role": "system", "content": "Extract only facts supported by the supplied text and return JSON."},
-                        {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
+                        {
+                            "role": "system",
+                            "content": extraction_system_prompt(request),
+                        },
+                        {
+                            "role": "user",
+                            "content": json.dumps(
+                                request.model_dump(), ensure_ascii=False
+                            ),
+                        },
                     ],
                     "response_format": {
                         "type": "json_schema",
@@ -58,7 +67,12 @@ class OpenAICompatibleProvider:
             result = ExtractionResult.model_validate_json(content)
             return result
         except httpx.HTTPStatusError as error:
-            kind = ProviderErrorKind.RETRYABLE if error.response.status_code == 429 or error.response.status_code >= 500 else ProviderErrorKind.CONFIGURATION
+            kind = (
+                ProviderErrorKind.RETRYABLE
+                if error.response.status_code == 429
+                or error.response.status_code >= 500
+                else ProviderErrorKind.CONFIGURATION
+            )
             raise ProviderError(
                 kind,
                 f"MODEL_HTTP_{error.response.status_code}",
@@ -67,4 +81,6 @@ class OpenAICompatibleProvider:
         except httpx.HTTPError as error:
             raise ProviderError(ProviderErrorKind.RETRYABLE, "MODEL_NETWORK_ERROR") from error
         except (KeyError, TypeError, ValueError, ValidationError) as error:
-            raise ProviderError(ProviderErrorKind.INVALID_RESPONSE, "MODEL_RESPONSE_INVALID") from error
+            raise ProviderError(
+                ProviderErrorKind.INVALID_RESPONSE, "MODEL_RESPONSE_INVALID"
+            ) from error

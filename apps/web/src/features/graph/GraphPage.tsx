@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useState } from 'react'
 
 import { apiFetch, type EntityDetail, type EntitySummary, type Neighborhood } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
 import { EntityPanel } from './EntityPanel'
 import { GraphCanvas } from './GraphCanvas'
+import { visibleEntityTypeStyles } from './entityTypeStyles'
 
 const EMPTY_GRAPH: Neighborhood = { nodes: [], edges: [] }
 
@@ -43,5 +44,5 @@ export function GraphPage() {
       }),
     }).catch((e: Error) => setError(e.message))
   }
-  return <section className="graph-page"><header className="graph-toolbar"><div><p className="eyebrow">GRAPH EXPLORER · 03</p><h1>沿关系，游江湖</h1></div><div className="search-wrap"><label htmlFor="graph-search">搜索人物、门派或武学</label><input id="graph-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="例如：令狐冲" />{results.length > 0 && <div className="search-results">{results.map(item => <button key={item.id} onClick={() => selectEntity(item.id)}><b>{item.name}</b><span>{item.type} · {item.description}</span></button>)}</div>}</div></header>{error && <div role="alert" className="error-state">{error}</div>}<div className="graph-workspace"><GraphCanvas graph={graph} onSelect={selectEntity} /><EntityPanel detail={detail} onClose={() => setDetail(undefined)} onReviewFact={reviewFact} /></div><footer className="graph-legend"><span><i className="person-dot" />人物</span><span><i />其他实体</span><b>{graph.nodes.length} 节点 · {graph.edges.length} 关系</b></footer></section>
+  return <section className="graph-page"><header className="graph-toolbar"><div><p className="eyebrow">GRAPH EXPLORER · 03</p><h1>沿关系，游江湖</h1></div><div className="search-wrap"><label htmlFor="graph-search">搜索人物、门派或武学</label><input id="graph-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="例如：令狐冲" />{results.length > 0 && <div className="search-results">{results.map(item => <button key={item.id} onClick={() => selectEntity(item.id)}><b>{item.name}</b><span>{item.type} · {item.description}</span></button>)}</div>}</div></header>{error && <div role="alert" className="error-state">{error}</div>}<div className="graph-workspace"><GraphCanvas graph={graph} onSelect={selectEntity} /><EntityPanel detail={detail} onClose={() => setDetail(undefined)} onReviewFact={reviewFact} /></div><footer className="graph-legend">{visibleEntityTypeStyles(graph.nodes).map(type => <span key={type.label}><i style={{ '--legend-color': type.color } as CSSProperties} />{type.label}</span>)}<b>{graph.nodes.length} 节点 · {graph.edges.length} 关系</b></footer></section>
 }

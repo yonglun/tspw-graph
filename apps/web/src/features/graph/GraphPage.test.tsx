@@ -109,4 +109,33 @@ describe('GraphPage', () => {
       expect.objectContaining({ method: 'POST' }),
     )
   })
+
+  it('shows graph legend entries for the visible entity types', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/graph/search')) return new Response(JSON.stringify([entity]))
+      if (url.includes('/api/entities/')) return new Response(JSON.stringify({ ...entity, facts: [] }))
+      if (url.includes('/api/graph/neighborhood')) {
+        return new Response(JSON.stringify({
+          nodes: [
+            entity,
+            { id: 'huashan', project_id: 'xiaoao', type: 'Sect', name: '华山派', aliases: [], description: '' },
+            { id: 'dugu', project_id: 'xiaoao', type: 'Swordplay', name: '独孤九剑', aliases: [], description: '' },
+          ],
+          edges: [],
+        }))
+      }
+      return new Response(JSON.stringify({}))
+    }))
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+
+    expect(await screen.findByText('人物')).toBeVisible()
+    expect(screen.getByText('门派')).toBeVisible()
+    expect(screen.getByText('剑法')).toBeVisible()
+    expect(screen.queryByText('其他实体')).not.toBeInTheDocument()
+  })
 })

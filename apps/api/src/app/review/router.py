@@ -27,6 +27,12 @@ class ManualReviewItemRequest(BaseModel):
     severity: int = Field(default=10, ge=0, le=100)
 
 
+class MergeEntitiesRequest(BaseModel):
+    source_entity_id: str = Field(min_length=1)
+    target_entity_id: str = Field(min_length=1)
+    idempotency_key: str | None = None
+
+
 def service() -> ReviewService:
     settings = Settings()
     engine = create_engine(settings.sqlite_url)
@@ -69,6 +75,19 @@ def create_item(project_id: str, item: ManualReviewItemRequest):
 def apply_action(project_id: str, item_id: str, request: ReviewActionRequest):
     try:
         return service().apply_action(project_id, item_id, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/entities/merge")
+def merge_entities(project_id: str, request: MergeEntitiesRequest):
+    try:
+        return service().merge_entities(
+            project_id,
+            source_entity_id=request.source_entity_id,
+            target_entity_id=request.target_entity_id,
+            idempotency_key=request.idempotency_key,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

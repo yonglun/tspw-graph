@@ -62,16 +62,55 @@ class ReviewGraphRepository:
             """
             MATCH (source:Entity {project_id: $project_id, id: $source_entity_id})
             MATCH (target:Entity {project_id: $project_id, id: $target_entity_id})
-            SET source.review_status = 'MERGED',
-                source.merged_into = target.id,
-                target.review_status = coalesce(target.review_status, 'ACCEPTED'),
-                target.aliases = coalesce(target.aliases, []) + coalesce(source.aliases, []) + [source.name]
-            WITH source
-            MATCH (fact:Fact {project_id: $project_id})-[:SOURCE|TARGET]->(source)
-            SET fact.review_status = coalesce(fact.review_status, 'ACCEPTED')
-            WITH fact
-            OPTIONAL MATCH ()-[related:RELATED {project_id: $project_id, id: fact.id}]->()
-            SET related.review_status = coalesce(related.review_status, 'ACCEPTED')
+            WITH source, target,
+                [alias IN coalesce(target.aliases, []) + coalesce(source.aliases, []) + [source.name]
+                    WHERE alias IS NOT NULL AND alias <> '' AND alias <> target.name] AS aliases
+            SET target.review_status = coalesce(target.review_status, 'ACCEPTED'),
+                target.aliases = reduce(unique_aliases = [], alias IN aliases |
+                    CASE
+                        WHEN alias IN unique_aliases THEN unique_aliases
+                        ELSE unique_aliases + alias
+                    END
+                )
+
+            WITH source, target
+            CALL {
+                WITH source, target
+                MATCH (source)-[related:RELATED {project_id: $project_id}]->(other:Entity {project_id: $project_id})
+                WHERE other.id <> target.id
+                MERGE (target)-[migrated:RELATED {project_id: related.project_id, id: related.id}]->(other)
+                SET migrated += properties(related)
+                DELETE related
+                RETURN count(*) AS outgoing_count
+            }
+            CALL {
+                WITH source, target
+                MATCH (other:Entity {project_id: $project_id})-[related:RELATED {project_id: $project_id}]->(source)
+                WHERE other.id <> target.id
+                MERGE (other)-[migrated:RELATED {project_id: related.project_id, id: related.id}]->(target)
+                SET migrated += properties(related)
+                DELETE related
+                RETURN count(*) AS incoming_count
+            }
+            CALL {
+                WITH source, target
+                MATCH (fact:Fact {project_id: $project_id})
+                WHERE fact.source_id = source.id OR fact.target_id = source.id
+                OPTIONAL MATCH (fact)-[old_ref:SOURCE|TARGET]->(source)
+                DELETE old_ref
+                SET fact.source_id = CASE WHEN fact.source_id = source.id THEN target.id ELSE fact.source_id END,
+                    fact.target_id = CASE WHEN fact.target_id = source.id THEN target.id ELSE fact.target_id END,
+                    fact.review_status = coalesce(fact.review_status, 'ACCEPTED')
+                WITH fact, target
+                FOREACH (_ IN CASE WHEN fact.source_id = target.id THEN [1] ELSE [] END |
+                    MERGE (fact)-[:SOURCE]->(target)
+                )
+                FOREACH (_ IN CASE WHEN fact.target_id = target.id THEN [1] ELSE [] END |
+                    MERGE (fact)-[:TARGET]->(target)
+                )
+                RETURN count(fact) AS fact_count
+            }
+            DETACH DELETE source
             """,
             project_id=project_id,
             source_entity_id=source_entity_id,

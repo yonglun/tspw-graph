@@ -64,6 +64,27 @@ def test_merge_entities_records_graph_action_and_audit():
     assert result.action.payload["target_entity_id"] == "e-2"
 
 
+def test_manual_merge_entities_creates_review_item_and_action():
+    svc, repo, graph = service()
+
+    result = svc.merge_entities(
+        "project-a",
+        source_entity_id="linghu-typo",
+        target_entity_id="linghuchong",
+        idempotency_key="manual-merge-linghu",
+    )
+
+    assert graph.merges == [("project-a", "linghu-typo", "linghuchong")]
+    assert result.item.item_type == ReviewItemType.DUPLICATE_ENTITY
+    assert result.item.status.value == "RESOLVED"
+    assert result.item.source.value == "manual"
+    assert result.action.action_type.value == "merge_entities"
+    assert result.action.payload == {
+        "source_entity_id": "linghu-typo",
+        "target_entity_id": "linghuchong",
+    }
+
+
 def test_split_alias_returns_created_entity_id_in_audit_payload():
     svc, repo, graph = service()
     item = repo.create_item_once(

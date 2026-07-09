@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   apiFetch,
@@ -9,6 +9,7 @@ import {
 } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
 import { AuditDrawer } from './AuditDrawer'
+import { EntityMergePanel } from './EntityMergePanel'
 import { ReviewDetail } from './ReviewDetail'
 import { ReviewQueue } from './ReviewQueue'
 import { ReviewSummary } from './ReviewSummary'
@@ -36,7 +37,7 @@ export function ReviewPage() {
     [items, selectedId],
   )
 
-  useEffect(() => {
+  const refreshReview = useCallback(() => {
     apiFetch<Summary>(`/api/projects/${projectId}/review/summary`).then(setSummary)
     apiFetch<{ items: ReviewItem[] }>(`/api/projects/${projectId}/review/items?status=OPEN&limit=50`).then(
       (body) => setItems(body.items),
@@ -46,12 +47,19 @@ export function ReviewPage() {
     )
   }, [projectId])
 
+  useEffect(() => {
+    refreshReview()
+  }, [refreshReview])
+
   function applyAction(request: ReviewActionRequest) {
     if (!selected) return
     apiFetch(`/api/projects/${projectId}/review/items/${selected.id}/actions`, {
       method: 'POST',
       body: JSON.stringify(request),
-    }).then(() => setItems((current) => current.filter((item) => item.id !== selected.id)))
+    }).then(() => {
+      setItems((current) => current.filter((item) => item.id !== selected.id))
+      refreshReview()
+    })
   }
 
   return (
@@ -61,6 +69,7 @@ export function ReviewPage() {
         <h1>审核工作台</h1>
       </header>
       <ReviewSummary summary={summary} />
+      <EntityMergePanel projectId={projectId} onMerged={refreshReview} />
       <div className="review-workspace">
         <ReviewQueue items={items} selectedId={selected?.id} onSelect={(item) => setSelectedId(item.id)} />
         <ReviewDetail item={selected} onAction={applyAction} />

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +14,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  cleanup()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -84,6 +85,60 @@ describe('ReviewPage', () => {
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('/review/items/review-1/actions'),
         expect.objectContaining({ method: 'POST' }),
+      ),
+    )
+  })
+
+  it('searches entities and submits a manual merge', async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/summary')) {
+        return json({
+          open_review_items: 0,
+          accepted_facts: 0,
+          rejected_facts: 0,
+          pending_facts: 0,
+          merged_entities: 0,
+          split_aliases: 0,
+          evidence_coverage: 0,
+          review_completion_rate: 0,
+          graph_fact_delta_before_after_review: 0,
+        })
+      }
+      if (url.includes('/graph/search') && url.includes('%E4%BB%A4%E7%8B%90%E4%B8%AD')) {
+        return json([
+          { id: 'entity-typo', project_id: 'xiaoao', type: 'Person', name: '令狐中', aliases: [], description: '' },
+        ])
+      }
+      if (url.includes('/graph/search') && url.includes('%E4%BB%A4%E7%8B%90%E5%86%B2')) {
+        return json([
+          { id: 'entity-canonical', project_id: 'xiaoao', type: 'Person', name: '令狐冲', aliases: [], description: '' },
+        ])
+      }
+      if (url.includes('/entities/merge') && init?.method === 'POST') {
+        return json({ item: { id: 'review-merge', status: 'RESOLVED' }, action: { id: 'action-merge' } })
+      }
+      if (url.includes('/items')) return json({ items: [] })
+      if (url.includes('/audit')) return json({ actions: [] })
+      return json({})
+    })
+    renderPage()
+
+    await userEvent.type(await screen.findByLabelText('源实体'), '令狐中')
+    await userEvent.click(await screen.findByRole('button', { name: '选择源实体 令狐中' }))
+    await userEvent.type(screen.getByLabelText('目标实体'), '令狐冲')
+    await userEvent.click(await screen.findByRole('button', { name: '选择目标实体 令狐冲' }))
+    await userEvent.click(screen.getByRole('button', { name: '合并实体' }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/review/entities/merge'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            source_entity_id: 'entity-typo',
+            target_entity_id: 'entity-canonical',
+          }),
+        }),
       ),
     )
   })

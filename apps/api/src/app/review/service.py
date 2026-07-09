@@ -3,7 +3,14 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from app.review.models import ReviewActionRead, ReviewActionType, ReviewItemRead
+from app.review.models import (
+    ReviewActionRead,
+    ReviewActionType,
+    ReviewItemCreate,
+    ReviewItemRead,
+    ReviewItemType,
+    ReviewSource,
+)
 from app.review.repository import ReviewRepository
 from app.review.rules import RuleScanner
 
@@ -57,6 +64,44 @@ class ReviewService:
 
     def audit(self, project_id: str, limit: int, cursor: str | None):
         return self.repository.list_actions(project_id, limit=limit, cursor=cursor)
+
+    def merge_entities(
+        self,
+        project_id: str,
+        *,
+        source_entity_id: str,
+        target_entity_id: str,
+        idempotency_key: str | None = None,
+    ) -> ReviewActionResult:
+        if source_entity_id == target_entity_id:
+            raise ValueError("merge_same_entity")
+        fingerprint = f"manual-merge:{source_entity_id}:{target_entity_id}"
+        item = self.repository.create_item_once(
+            project_id,
+            ReviewItemCreate(
+                item_type=ReviewItemType.DUPLICATE_ENTITY,
+                source=ReviewSource.MANUAL,
+                reason_code="MANUAL_ENTITY_MERGE",
+                target={
+                    "source_entity_id": source_entity_id,
+                    "target_entity_id": target_entity_id,
+                },
+                fingerprint=fingerprint,
+                severity=80,
+            ),
+        )
+        return self.apply_action(
+            project_id,
+            item.id,
+            ReviewActionRequest(
+                action_type=ReviewActionType.MERGE_ENTITIES,
+                payload={
+                    "source_entity_id": source_entity_id,
+                    "target_entity_id": target_entity_id,
+                },
+                idempotency_key=idempotency_key or fingerprint,
+            ),
+        )
 
     def apply_action(
         self, project_id: str, item_id: str, request: ReviewActionRequest

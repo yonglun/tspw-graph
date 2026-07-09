@@ -20,3 +20,4 @@ def test_extraction_prompt_includes_relation_labels_and_direction_rules():
     assert "SPOUSE_OF" in prompt
     assert "妻子" in prompt
     assert "start/end 必须精确定位 quote" in prompt
+    assert "quote 必须少于 500 字" in prompt

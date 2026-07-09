@@ -87,6 +87,25 @@ def test_normalizer_rejects_empty_evidence_without_failing_chunk():
     assert normalized.rejections[0].code == "EVIDENCE_MISMATCH"
 
 
+def test_normalizer_rejects_overlong_evidence_without_failing_chunk():
+    long_quote = "甲识乙" * 200
+    chunk = TextChunk("c1", 1, 100, 100 + len(long_quote), long_quote)
+    result = ExtractionResult.model_validate({
+        "entities": [
+            {"local_id": "a", "name": "甲", "type": "Person"},
+            {"local_id": "b", "name": "乙", "type": "Person"},
+        ],
+        "facts": [{
+            "relation": "ALLY_OF", "source_local_id": "a", "target_local_id": "b",
+            "evidence": {"start": 0, "end": len(long_quote), "quote": long_quote}
+        }],
+    })
+    normalized = normalize_chunk_result("p-1", chunk, result)
+    assert normalized.facts == []
+    assert normalized.evidence == []
+    assert normalized.rejections[0].code == "EVIDENCE_TOO_LONG"
+
+
 def test_normalizer_rejects_blank_fact_endpoint_without_failing_chunk():
     chunk = TextChunk("c1", 1, 100, 103, "甲识乙")
     result = ExtractionResult.model_validate({

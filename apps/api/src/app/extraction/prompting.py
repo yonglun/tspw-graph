@@ -45,6 +45,7 @@ def extraction_system_prompt(request: ExtractionRequest) -> str:
             "输出必须符合 JSON schema。",
             "证据要求：每个 fact 的 evidence.start/end 必须精确定位 quote；"
             "quote 必须逐字等于 text[start:end]，不能省略、繁简转换或改写。",
+            "quote 必须少于 500 字，只取能证明关系的最短原文片段，不要返回整段上下文。",
             "实体类型：",
             *entities,
             "关系类型和方向规则：",

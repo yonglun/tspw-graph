@@ -198,6 +198,46 @@ def test_azure_openai_provider_accepts_blank_fact_endpoint_for_normalization():
     assert result.facts[0].source_local_id == ""
 
 
+def test_azure_openai_provider_accepts_overlong_fact_evidence_for_normalization():
+    long_quote = "令狐冲" * 200
+    content = json.dumps(
+        {
+            "entities": [
+                {"local_id": "p1", "name": "令狐冲", "type": "Person", "aliases": []},
+                {"local_id": "m1", "name": "岳不群", "type": "Person", "aliases": []},
+            ],
+            "facts": [
+                {
+                    "relation": "MASTER_OF",
+                    "source_local_id": "m1",
+                    "target_local_id": "p1",
+                    "evidence": {
+                        "start": 0,
+                        "end": len(long_quote),
+                        "quote": long_quote,
+                    },
+                    "confidence": 0.3,
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = AzureOpenAIProvider(
+        base_url="https://example.openai.azure.com",
+        deployment="kg-extractor",
+        api_version="2025-01-01-preview",
+        api_key="azure-secret",
+        client=client,
+    ).extract(request())
+
+    assert result.facts[0].evidence.quote == long_quote
+
+
 def test_ollama_provider_uses_non_streaming_schema_format():
     captured = {}
 

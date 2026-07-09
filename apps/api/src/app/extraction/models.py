@@ -22,7 +22,7 @@ class CandidateEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
     start: int = Field(ge=0)
     end: int = Field(ge=0)
-    quote: str = Field(max_length=500)
+    quote: str
 
 
 class CandidateFact(BaseModel):

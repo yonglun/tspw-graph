@@ -61,6 +61,29 @@ def test_extraction_result_accepts_empty_model_evidence_for_downstream_rejection
     assert result.facts[0].evidence.quote == ""
 
 
+def test_extraction_result_accepts_overlong_model_evidence_for_downstream_rejection():
+    long_quote = "令狐冲" * 200
+    result = ExtractionResult.model_validate(
+        {
+            "entities": [],
+            "facts": [
+                {
+                    "relation": "KNOWS",
+                    "source_local_id": "a",
+                    "target_local_id": "b",
+                    "evidence": {
+                        "start": 0,
+                        "end": len(long_quote),
+                        "quote": long_quote,
+                    },
+                    "confidence": 0.5,
+                }
+            ],
+        }
+    )
+    assert result.facts[0].evidence.quote == long_quote
+
+
 def test_evidence_offsets_and_quote_must_match_chunk():
     result = ExtractionResult.model_validate(
         {

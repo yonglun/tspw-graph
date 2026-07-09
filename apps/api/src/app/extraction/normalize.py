@@ -8,6 +8,9 @@ from app.graph.models import EntityRecord, EvidenceRecord, FactRecord
 from app.ontology.models import EntityType, RelationType
 
 
+MAX_EVIDENCE_QUOTE_LENGTH = 500
+
+
 @dataclass(frozen=True)
 class Rejection:
     code: str
@@ -78,6 +81,9 @@ def normalize_chunk_result(
             normalized.rejections.append(Rejection("UNKNOWN_FACT_ENTITY"))
             continue
         evidence = candidate.evidence
+        if len(evidence.quote) > MAX_EVIDENCE_QUOTE_LENGTH:
+            normalized.rejections.append(Rejection("EVIDENCE_TOO_LONG"))
+            continue
         aligned_range = _aligned_evidence_range(
             chunk.text, evidence.start, evidence.end, evidence.quote
         )

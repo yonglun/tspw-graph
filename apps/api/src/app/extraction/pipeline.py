@@ -126,18 +126,35 @@ class ExtractionPipeline:
                 rejections.update([error.code])
                 continue
             successful_chunks += 1
-            extracted = rule_based_extract(chunk, extracted)
+            if not attributes_only:
+                extracted = rule_based_extract(chunk, extracted)
             normalized = normalize_chunk_result(project_id, chunk, extracted)
             entities.update((item.id, item) for item in normalized.entities)
-            evidence.update((item.id, item) for item in normalized.evidence)
-            for item in normalized.facts:
-                existing = facts.get(item.id)
-                if existing:
-                    facts[item.id] = existing.model_copy(
-                        update={"evidence_ids": sorted(set(existing.evidence_ids + item.evidence_ids))}
-                    )
-                else:
-                    facts[item.id] = item
+            if attributes_only:
+                attribute_evidence_ids = {
+                    evidence_id
+                    for attribute in normalized.attributes
+                    for evidence_id in attribute.evidence_ids
+                }
+                evidence.update(
+                    (item.id, item)
+                    for item in normalized.evidence
+                    if item.id in attribute_evidence_ids
+                )
+            else:
+                evidence.update((item.id, item) for item in normalized.evidence)
+                for item in normalized.facts:
+                    existing = facts.get(item.id)
+                    if existing:
+                        facts[item.id] = existing.model_copy(
+                            update={
+                                "evidence_ids": sorted(
+                                    set(existing.evidence_ids + item.evidence_ids)
+                                )
+                            }
+                        )
+                    else:
+                        facts[item.id] = item
             for item in normalized.attributes:
                 existing = attributes.get(item.id)
                 if existing:
@@ -172,14 +189,27 @@ class ExtractionPipeline:
             if attributes_only
             else self.importer.import_document(document)
         )
+        accepted_entities = 0 if attributes_only else len(entities)
+        accepted_facts = 0 if attributes_only else len(facts)
+        accepted_evidence = (
+            len(
+                {
+                    evidence_id
+                    for attribute in attributes.values()
+                    for evidence_id in attribute.evidence_ids
+                }
+            )
+            if attributes_only
+            else len(evidence)
+        )
         return PipelineResult(
             quality=QualityReport(
                 total_chunks=len(split.chunks),
                 successful_chunks=successful_chunks,
                 failed_chunks=failed_chunks,
-                accepted_entities=len(entities),
-                accepted_facts=len(facts),
-                accepted_evidence=len(evidence),
+                accepted_entities=accepted_entities,
+                accepted_facts=accepted_facts,
+                accepted_evidence=accepted_evidence,
                 accepted_attributes=len(attributes),
                 accepted_attribute_evidence=len(
                     {

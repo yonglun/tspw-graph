@@ -241,6 +241,17 @@ class FakeDriver:
         return self.fake_session
 
 
+class FakeNode(dict):
+    pass
+
+
+class FakeEdge(dict):
+    def __init__(self, source_id: str, target_id: str, **values):
+        super().__init__(**values)
+        self.start_node = FakeNode(id=source_id)
+        self.end_node = FakeNode(id=target_id)
+
+
 def test_exact_search_uses_composite_index_compatible_equalities() -> None:
     session = FakeSession()
     repository = Neo4jGraphRepository(FakeDriver(session))
@@ -276,6 +287,37 @@ def test_depth_two_query_stays_bounded() -> None:
 
     assert result is None
     assert "RELATED*1..2" in session.statement
+
+
+def test_neighborhood_caps_nodes_after_deduplication_and_drops_trimmed_edges() -> None:
+    center = FakeNode(id="center", project_id="p-1", type="Person", name="中心")
+    first = FakeNode(id="first", project_id="p-1", type="Person", name="甲")
+    second = FakeNode(id="second", project_id="p-1", type="Person", name="乙")
+    duplicate_second = FakeNode(id="second", project_id="p-1", type="Person", name="乙")
+    session = FakeSession(
+        {
+            "nodes": [center, first, second, duplicate_second],
+            "edges": [
+                FakeEdge("center", "first", id="edge-1", type="ALLY_OF"),
+                FakeEdge("first", "second", id="edge-2", type="ALLY_OF"),
+            ],
+        }
+    )
+    repository = Neo4jGraphRepository(FakeDriver(session))
+
+    result = repository.neighborhood("p-1", "center", 2, 2, None, None)
+
+    assert result == {
+        "nodes": [dict(center), dict(first)],
+        "edges": [
+            {
+                "id": "edge-1",
+                "type": "ALLY_OF",
+                "source_id": "center",
+                "target_id": "first",
+            }
+        ],
+    }
 
 
 def test_entity_detail_query_aggregates_attributes_and_facts_separately() -> None:

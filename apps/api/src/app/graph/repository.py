@@ -143,16 +143,37 @@ class Neo4jGraphRepository:
             ).single()
             if record is None:
                 return None
-            nodes = {node["id"]: dict(node) for node in record["nodes"]}
-            edges = {
-                edge["id"]: {
+            return self._bounded_neighborhood(record["nodes"], record["edges"], limit)
+
+    @staticmethod
+    def _bounded_neighborhood(nodes, edges, limit: int) -> dict[str, list[dict[str, Any]]]:
+        retained_nodes: dict[str, dict[str, Any]] = {}
+        for node in nodes:
+            node_id = node["id"]
+            if node_id not in retained_nodes:
+                if len(retained_nodes) >= limit:
+                    break
+                retained_nodes[node_id] = dict(node)
+
+        retained_node_ids = set(retained_nodes)
+        retained_edges: dict[str, dict[str, Any]] = {}
+        for edge in edges:
+            source_id = edge.start_node["id"]
+            target_id = edge.end_node["id"]
+            if source_id not in retained_node_ids or target_id not in retained_node_ids:
+                continue
+            retained_edges.setdefault(
+                edge["id"],
+                {
                     **dict(edge),
-                    "source_id": edge.start_node["id"],
-                    "target_id": edge.end_node["id"],
-                }
-                for edge in record["edges"]
-            }
-            return {"nodes": list(nodes.values()), "edges": list(edges.values())}
+                    "source_id": source_id,
+                    "target_id": target_id,
+                },
+            )
+        return {
+            "nodes": list(retained_nodes.values()),
+            "edges": list(retained_edges.values()),
+        }
 
     def shortest_path(
         self, project_id: str, source_id: str, target_id: str, max_depth: int

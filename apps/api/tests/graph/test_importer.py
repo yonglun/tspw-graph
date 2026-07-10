@@ -114,6 +114,10 @@ def test_attribute_upsert_matches_existing_entity_without_creating_one() -> None
     assert "project_id: row.project_id" in query
     assert "id: row.entity_id" in query
     assert "OPTIONAL MATCH (candidate:Entity {project_id: row.project_id})" in query
+    assert "stable.type = row.entity_type" in query
+    assert "coalesce(stable.review_status, 'ACCEPTED') <> 'MERGED'" in query
+    assert "candidate.type = row.entity_type" in query
+    assert "coalesce(candidate.review_status, 'ACCEPTED') <> 'MERGED'" in query
     assert (
         "candidate.name = row.entity_name OR "
         "row.entity_name IN coalesce(candidate.aliases, [])"

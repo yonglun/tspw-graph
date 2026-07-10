@@ -54,8 +54,12 @@ UPSERT_QUERIES: dict[str, str] = {
             project_id: row.project_id,
             id: row.entity_id
         })
+        WHERE stable.type = row.entity_type
+          AND coalesce(stable.review_status, 'ACCEPTED') <> 'MERGED'
         OPTIONAL MATCH (candidate:Entity {project_id: row.project_id})
         WHERE stable IS NULL
+          AND candidate.type = row.entity_type
+          AND coalesce(candidate.review_status, 'ACCEPTED') <> 'MERGED'
           AND (
             candidate.name = row.entity_name
             OR row.entity_name IN coalesce(candidate.aliases, [])

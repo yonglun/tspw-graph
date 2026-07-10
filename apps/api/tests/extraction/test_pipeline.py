@@ -210,7 +210,9 @@ def test_attribute_only_pipeline_imports_only_attribute_evidence():
     assert set(writer.rows) == {"Evidence", "AttributeAssertion"}
     referenced_evidence = writer.rows["AttributeAssertion"][0]["evidence_ids"]
     assert [row["id"] for row in writer.rows["Evidence"]] == referenced_evidence
-    assert output.quality.accepted_facts == 1
+    assert output.quality.accepted_entities == 0
+    assert output.quality.accepted_facts == 0
+    assert output.quality.accepted_evidence == 1
     assert output.import_summary.created_entities == 0
     assert output.import_summary.created_facts == 0
     assert output.import_summary.created_evidence == 1

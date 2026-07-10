@@ -81,6 +81,57 @@ def test_search_rejects_excessive_limit() -> None:
     assert response.status_code == 422
 
 
+def test_entity_detail_serializes_attributes_and_relations() -> None:
+    class Repository:
+        def entity_detail(self, project_id: str, entity_id: str):
+            return {
+                "entity": {
+                    "id": entity_id,
+                    "project_id": project_id,
+                    "type": "Person",
+                    "name": "令狐冲",
+                    "aliases": [],
+                    "description": "",
+                },
+                "attributes": [
+                    {
+                        "id": "attr-identity",
+                        "property_id": "identity",
+                        "value_type": "TEXT",
+                        "value": "华山派大弟子",
+                        "confidence": 1,
+                        "evidence": [],
+                    }
+                ],
+                "rows": [
+                    {
+                        "id": "fact-master",
+                        "type": "MASTER_OF",
+                        "source_id": "yue",
+                        "target_id": entity_id,
+                        "review_status": "ACCEPTED",
+                        "source": {"id": "yue", "type": "Person", "name": "岳不群"},
+                        "target": {"id": entity_id, "type": "Person", "name": "令狐冲"},
+                        "evidence": None,
+                    }
+                ],
+            }
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        response = TestClient(app).get(
+            "/api/entities/linghu", params={"project_id": "p-1"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["attributes"][0]["label"] == "身份"
+    assert body["relations"][0]["other"]["name"] == "岳不群"
+    assert body["facts"][0]["id"] == "fact-master"
+
+
 def test_app_lifespan_reuses_and_closes_one_neo4j_driver() -> None:
     driver = Mock()
 

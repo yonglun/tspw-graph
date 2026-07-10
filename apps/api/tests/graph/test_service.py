@@ -137,6 +137,73 @@ def test_missing_neighborhood_center_raises_not_found() -> None:
         GraphService(Repository()).neighborhood("p-1", "missing", 1, 50, None, None)
 
 
+def test_entity_detail_includes_attributes_and_relation_summaries() -> None:
+    class Repository:
+        def entity_detail(self, project_id, entity_id):
+            return {
+                "entity": {
+                    "id": entity_id,
+                    "project_id": project_id,
+                    "type": "Person",
+                    "name": "令狐冲",
+                    "aliases": [],
+                    "description": "",
+                },
+                "attributes": [
+                    {
+                        "id": "attr-identity",
+                        "property_id": "identity",
+                        "value_type": "TEXT",
+                        "value": "华山派大弟子",
+                        "confidence": 0.96,
+                        "evidence": [
+                            {
+                                "id": "ev-attr",
+                                "chapter_id": "chapter-1",
+                                "chapter_number": 1,
+                                "chapter_title": "第一章",
+                                "start_offset": 10,
+                                "end_offset": 16,
+                                "quote": "华山派大弟子",
+                            }
+                        ],
+                    }
+                ],
+                "rows": [
+                    {
+                        "id": "fact-master",
+                        "type": "MASTER_OF",
+                        "source_id": "yue",
+                        "target_id": entity_id,
+                        "review_status": "ACCEPTED",
+                        "source": {"id": "yue", "type": "Person", "name": "岳不群"},
+                        "target": {"id": entity_id, "type": "Person", "name": "令狐冲"},
+                        "evidence": {
+                            "id": "ev-fact",
+                            "chapter_id": "chapter-1",
+                            "chapter_number": 1,
+                            "chapter_title": "第一章",
+                            "start_offset": 20,
+                            "end_offset": 26,
+                            "quote": "岳不群传授令狐冲",
+                        },
+                    }
+                ],
+            }
+
+    detail = GraphService(Repository()).entity_detail("p-1", "linghu")
+
+    assert detail.attributes[0].property_id == "identity"
+    assert detail.attributes[0].label == "身份"
+    assert detail.attributes[0].value == "华山派大弟子"
+    assert detail.attributes[0].evidence[0].quote == "华山派大弟子"
+    assert detail.relations[0].fact_id == "fact-master"
+    assert detail.relations[0].label == "师父"
+    assert detail.relations[0].direction == "INCOMING"
+    assert detail.relations[0].other.name == "岳不群"
+    assert detail.facts[0].evidence[0].quote == "岳不群传授令狐冲"
+
+
 class FakeResult:
     def __init__(self, record):
         self.record = record
@@ -209,3 +276,21 @@ def test_depth_two_query_stays_bounded() -> None:
 
     assert result is None
     assert "RELATED*1..2" in session.statement
+
+
+def test_entity_detail_query_aggregates_attributes_and_facts_separately() -> None:
+    entity = {
+        "id": "linghu",
+        "project_id": "p-1",
+        "type": "Person",
+        "name": "令狐冲",
+    }
+    session = FakeSession({"entity": entity, "attributes": [], "rows": []})
+    repository = Neo4jGraphRepository(FakeDriver(session))
+
+    result = repository.entity_detail("p-1", "linghu")
+
+    assert result == {"entity": entity, "attributes": [], "rows": []}
+    assert session.statement.count("CALL {") == 2
+    assert "HAS_ATTRIBUTE" in session.statement
+    assert "(fact:Fact)-[:SOURCE|TARGET]->(entity)" in session.statement

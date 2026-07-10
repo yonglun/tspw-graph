@@ -192,26 +192,74 @@ class Neo4jGraphRepository:
         statement = """
             MATCH (entity:Entity {project_id: $project_id, id: $entity_id})
             WHERE coalesce(entity.review_status, 'ACCEPTED') <> 'MERGED'
-            OPTIONAL MATCH (fact:Fact)-[:SOURCE|TARGET]->(entity)
-            WHERE coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
-            OPTIONAL MATCH (fact)-[:SOURCE]->(source:Entity)
-            OPTIONAL MATCH (fact)-[:TARGET]->(target:Entity)
-            OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence)-[:IN_CHAPTER]->(chapter:Chapter)
-            RETURN properties(entity) AS entity,
-                collect(DISTINCT {
-                    id: fact.id, type: fact.type, source_id: source.id, target_id: target.id,
+            CALL {
+                WITH entity
+                OPTIONAL MATCH (entity)-[:HAS_ATTRIBUTE]->(attribute:AttributeAssertion)
+                OPTIONAL MATCH (attribute)-[:EVIDENCED_BY]->(attribute_evidence:Evidence)
+                    -[:IN_CHAPTER]->(attribute_chapter:Chapter)
+                WITH attribute, collect(DISTINCT {
+                    id: attribute_evidence.id,
+                    chapter_id: attribute_chapter.id,
+                    chapter_number: attribute_chapter.number,
+                    chapter_title: attribute_chapter.title,
+                    start_offset: attribute_evidence.start_offset,
+                    end_offset: attribute_evidence.end_offset,
+                    quote: attribute_evidence.quote
+                }) AS evidence_rows
+                WITH attribute,
+                    [item IN evidence_rows WHERE item.id IS NOT NULL] AS evidence
+                WHERE attribute IS NOT NULL
+                RETURN collect({
+                    id: attribute.id,
+                    property_id: attribute.property_id,
+                    value_type: attribute.value_type,
+                    value: attribute.value,
+                    confidence: coalesce(attribute.confidence, 1.0),
+                    evidence: evidence
+                }) AS attributes
+            }
+            CALL {
+                WITH entity
+                OPTIONAL MATCH (fact:Fact)-[:SOURCE|TARGET]->(entity)
+                WHERE coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
+                OPTIONAL MATCH (fact)-[:SOURCE]->(source:Entity)
+                OPTIONAL MATCH (fact)-[:TARGET]->(target:Entity)
+                OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence)
+                    -[:IN_CHAPTER]->(chapter:Chapter)
+                WITH fact, source, target, evidence, chapter
+                WHERE fact IS NOT NULL
+                  AND coalesce(source.review_status, 'ACCEPTED') <> 'MERGED'
+                  AND coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
+                RETURN collect(DISTINCT {
+                    id: fact.id,
+                    type: fact.type,
+                    source_id: source.id,
+                    target_id: target.id,
                     review_status: fact.review_status,
-                    evidence: {id: evidence.id, chapter_id: chapter.id,
-                        chapter_number: chapter.number, chapter_title: chapter.title,
-                        start_offset: evidence.start_offset, end_offset: evidence.end_offset,
-                        quote: evidence.quote}
+                    source: {id: source.id, type: source.type, name: source.name},
+                    target: {id: target.id, type: target.type, name: target.name},
+                    evidence: {
+                        id: evidence.id,
+                        chapter_id: chapter.id,
+                        chapter_number: chapter.number,
+                        chapter_title: chapter.title,
+                        start_offset: evidence.start_offset,
+                        end_offset: evidence.end_offset,
+                        quote: evidence.quote
+                    }
                 }) AS rows
+            }
+            RETURN properties(entity) AS entity, attributes, rows
         """
         with self.driver.session() as session:
             record = session.run(statement, project_id=project_id, entity_id=entity_id).single()
             if record is None:
                 return None
-            return {"entity": record["entity"], "rows": record["rows"]}
+            return {
+                "entity": record["entity"],
+                "attributes": record["attributes"],
+                "rows": record["rows"],
+            }
 
     def timeline(
         self,

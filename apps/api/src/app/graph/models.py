@@ -1,4 +1,4 @@
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -146,7 +146,33 @@ class RelatedFact(BaseModel):
     evidence: list[EvidenceDetail] = Field(default_factory=list)
 
 
+class AttributeDetail(BaseModel):
+    id: str
+    property_id: str
+    label: str
+    value_type: str
+    value: str
+    confidence: float = 1.0
+    evidence: list[EvidenceDetail] = Field(default_factory=list)
+
+
+class RelationEntity(BaseModel):
+    id: str
+    type: str
+    name: str
+
+
+class RelationSummary(BaseModel):
+    fact_id: str
+    type: str
+    label: str
+    direction: Literal["OUTGOING", "INCOMING"]
+    other: RelationEntity
+
+
 class EntityDetail(EntitySummary):
+    attributes: list[AttributeDetail] = Field(default_factory=list)
+    relations: list[RelationSummary] = Field(default_factory=list)
     facts: list[RelatedFact] = Field(default_factory=list)
 
 

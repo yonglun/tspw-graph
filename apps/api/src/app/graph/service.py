@@ -1,14 +1,19 @@
 from typing import Any
 
 from app.graph.models import (
+    AttributeDetail,
     EntityDetail,
     EntitySummary,
     EvidenceDetail,
     GraphEdge,
     Neighborhood,
+    RelationSummary,
     RelatedFact,
     TimelineEvent,
 )
+from app.ontology.catalog import relation_by_id
+from app.ontology.models import EntityType
+from app.ontology.properties import property_definition_for
 
 
 class EntityNotFoundError(LookupError):
@@ -94,8 +99,48 @@ class GraphService:
         result = self.repository.entity_detail(project_id, entity_id)
         if result is None:
             raise EntityNotFoundError(entity_id)
+        entity = EntitySummary.model_validate(result["entity"])
+        attributes = self._attribute_details(entity, result.get("attributes", []))
+        facts = self._related_facts(result.get("rows", []))
+        relations = self._relation_summaries(entity_id, result.get("rows", []))
+        return EntityDetail(
+            **entity.model_dump(),
+            attributes=attributes,
+            relations=relations,
+            facts=facts,
+        )
+
+    def _attribute_details(
+        self, entity: EntitySummary, rows: list[dict[str, Any]]
+    ) -> list[AttributeDetail]:
+        try:
+            entity_type = EntityType(entity.type)
+        except ValueError:
+            entity_type = None
+        details: list[AttributeDetail] = []
+        for row in rows:
+            if row.get("id") is None:
+                continue
+            property_id = row.get("property_id", "")
+            definition = (
+                property_definition_for(entity_type, property_id)
+                if entity_type is not None
+                else None
+            )
+            details.append(
+                AttributeDetail.model_validate(
+                    {
+                        **row,
+                        "label": definition.label if definition else property_id,
+                        "evidence": self._deduplicate_evidence(row.get("evidence", [])),
+                    }
+                )
+            )
+        return details
+
+    def _related_facts(self, rows: list[dict[str, Any]]) -> list[RelatedFact]:
         grouped: dict[str, dict[str, Any]] = {}
-        for row in result["rows"]:
+        for row in rows:
             if row.get("id") is None:
                 continue
             fact = grouped.setdefault(
@@ -111,12 +156,53 @@ class GraphService:
             )
             evidence = row.get("evidence")
             if evidence and evidence.get("id") is not None:
-                fact["evidence"].append(EvidenceDetail.model_validate(evidence))
-        entity = EntitySummary.model_validate(result["entity"])
-        return EntityDetail(
-            **entity.model_dump(),
-            facts=[RelatedFact.model_validate(item) for item in grouped.values()],
-        )
+                fact["evidence"].append(evidence)
+        return [
+            RelatedFact.model_validate(
+                {**item, "evidence": self._deduplicate_evidence(item["evidence"])}
+            )
+            for item in grouped.values()
+        ]
+
+    def _relation_summaries(
+        self, entity_id: str, rows: list[dict[str, Any]]
+    ) -> list[RelationSummary]:
+        summaries: dict[str, RelationSummary] = {}
+        for row in rows:
+            fact_id = row.get("id")
+            if fact_id is None or fact_id in summaries:
+                continue
+            source = row.get("source") or {}
+            target = row.get("target") or {}
+            if row.get("source_id") == entity_id:
+                direction = "OUTGOING"
+                other = target
+            elif row.get("target_id") == entity_id:
+                direction = "INCOMING"
+                other = source
+            else:
+                continue
+            if not other.get("id"):
+                continue
+            relation = relation_by_id(row.get("type", ""))
+            summaries[fact_id] = RelationSummary.model_validate(
+                {
+                    "fact_id": fact_id,
+                    "type": row.get("type", ""),
+                    "label": relation.label if relation else row.get("type", ""),
+                    "direction": direction,
+                    "other": other,
+                }
+            )
+        return list(summaries.values())
+
+    @staticmethod
+    def _deduplicate_evidence(rows: list[dict[str, Any]]) -> list[EvidenceDetail]:
+        unique: dict[str, EvidenceDetail] = {}
+        for row in rows:
+            if row.get("id") is not None and row["id"] not in unique:
+                unique[row["id"]] = EvidenceDetail.model_validate(row)
+        return list(unique.values())
 
     def timeline(
         self,

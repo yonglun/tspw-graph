@@ -52,6 +52,21 @@ make dev
 - 上传后任务 ID 保存在 URL，刷新可恢复进度；SSE 断开后前端自动轮询。
 - 任务可暂停、继续、取消；失败后可重试。Worker 重启会继续租约过期的任务。
 - 在项目切换器中选中用户项目后可删除；内置《笑傲江湖》项目不可删除。
+- 已有项目保留原始 TXT 时，可在 `/build` 选择“重新抽取属性”。属性补抽只增量写入有证据支持的实体属性和属性证据，不重建实体、关系事实或审核状态。
+
+升级并验证图谱响应耗时：
+
+```bash
+git pull
+sudo docker compose up -d --build --wait
+python3 scripts/check-graph-performance.py --base-url http://localhost:5173 --project-id xiaoao --query 令狐冲
+```
+
+监控补抽或完整构建任务：
+
+```bash
+docker compose logs -f worker
+```
 
 ### 阶段三：审核与质量改进
 
@@ -79,6 +94,8 @@ docker run --rm -v tspw-graph_neo4j-data:/data -v "$PWD/backups:/backup" alpine 
 `make verify` 会核对内置图谱的原文证据，因此需要未纳入 Git 的 `笑傲江湖/笑傲江湖.txt`。若文件在其他位置，使用 `SOURCE_PATH=/path/to/笑傲江湖.txt make verify`。
 
 真实模型冒烟测试在档案或密钥缺失时会明确跳过，不进入默认 `verify`。
+
+首次在生产项目上执行属性补抽前，先备份 `tspw-graph_app-data` 和 `tspw-graph_neo4j-data` 两个 Docker volume。
 
 ## 许可证
 

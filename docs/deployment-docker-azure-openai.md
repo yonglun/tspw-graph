@@ -187,6 +187,16 @@ git pull --ff-only origin master
 docker compose up -d --build --wait
 ```
 
+升级到带实体属性补抽和图谱性能优化的版本后，建议立即执行一次图谱 API 计时检查：
+
+```bash
+git pull
+sudo docker compose up -d --build --wait
+python3 scripts/check-graph-performance.py --base-url http://localhost:5173 --project-id xiaoao --query 令狐冲
+```
+
+输出会包含搜索 P50/P95、一度图谱、详情和二度图谱的毫秒耗时，以及被选中的实体 ID。预算超标只打印 warning，不会让脚本失败；搜索无结果或请求失败会返回非零退出码。
+
 删除所有容器和网络但保留 volume：
 
 ```bash
@@ -219,13 +229,53 @@ docker run --rm -v tspw-graph_neo4j-data:/data -v "$PWD/backups:/backup" alpine 
   tar czf /backup/neo4j-data.tgz -C /data .
 ```
 
+首次在生产项目上执行属性补抽前，必须同时备份 `tspw-graph_app-data` 和 `tspw-graph_neo4j-data` 两个 volume。属性补抽会保留已有实体、关系事实、审核状态和合并结果，只增量写入属性断言及其证据；但生产回滚仍应以 volume 备份为准。
+
 恢复前应先停止服务：
 
 ```bash
 docker compose down
 ```
 
-## 10. 常见故障
+## 10. 属性补抽与性能检查
+
+现有项目保留原始 TXT 时，构建页会显示“重新抽取属性”：
+
+1. 打开 `http://127.0.0.1:5173/build`；
+2. 在项目切换器中选择要补抽的项目；
+3. 在“属性补抽模型”中选择 Azure OpenAI profile；
+4. 点击“重新抽取属性”；
+5. 等待任务完成后进入图谱页，点击实体查看本体属性、关系摘要、属性证据和关系证据。
+
+如果按钮显示“原始 TXT 不可用”，说明该项目没有可用于补抽的上传源文件，需要重新上传或恢复 `app-data` volume。
+
+监控 Worker：
+
+```bash
+docker compose logs -f worker
+```
+
+补抽完成后可执行性能检查：
+
+```bash
+python3 scripts/check-graph-performance.py \
+  --base-url http://localhost:5173 \
+  --project-id xiaoao \
+  --query 令狐冲
+```
+
+预期输出示例：
+
+```text
+search_p50_ms=120.0
+search_p95_ms=180.0
+one_hop_ms=240.0
+detail_ms=360.0
+two_hop_ms=520.0
+entity_id=xiaoao:Person:example
+```
+
+## 11. 常见故障
 
 ### 端口被占用
 
@@ -302,7 +352,7 @@ docker compose logs -f worker
 - `api` 和 `neo4j` 是 healthy；
 - `.env` 中模型密钥配置正确。
 
-## 11. 安全建议
+## 12. 安全建议
 
 - 不要把 `.env` 上传到 GitHub；
 - 生产环境必须替换 `NEO4J_PASSWORD`；

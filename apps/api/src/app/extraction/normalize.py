@@ -109,7 +109,7 @@ def normalize_chunk_result(
         absolute_end = chunk.start_offset + aligned_end
         evidence_id = (
             f"{project_id}:evidence:"
-            f"{_stable_id(chunk.id, str(absolute_start), evidence.quote)}"
+            f"{_stable_id(str(absolute_start), str(absolute_end), evidence.quote)}"
         )
         if evidence_id not in evidence_by_id:
             record = EvidenceRecord(

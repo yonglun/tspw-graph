@@ -63,6 +63,48 @@ def test_pipeline_aggregates_attribute_evidence_and_reports_quality():
     assert len(importer.document.attributes[0].evidence_ids) == 2
 
 
+def test_pipeline_deduplicates_attribute_evidence_from_overlapping_chunks():
+    phrase = "令狐冲是华山派大弟子"
+    source = f"{'甲' * 3800}{phrase}{'乙' * 300}"
+
+    class OverlapProvider:
+        def extract(self, request):
+            phrase_start = request.text.find(phrase)
+            if phrase_start < 0:
+                return ExtractionResult()
+            value = "华山派大弟子"
+            value_start = phrase_start + len("令狐冲是")
+            return ExtractionResult.model_validate({
+                "entities": [
+                    {"local_id": "p1", "name": "令狐冲", "type": "Person"}
+                ],
+                "facts": [],
+                "attributes": [{
+                    "entity_local_id": "p1",
+                    "property_id": "identity",
+                    "value": value,
+                    "evidence": {
+                        "start": value_start,
+                        "end": value_start + len(value),
+                        "quote": value,
+                    },
+                }],
+            })
+
+    importer = CapturingImporter()
+    output = ExtractionPipeline(importer).process(
+        "p-1", "测试", source, OverlapProvider()
+    )
+
+    assert output.quality.total_chunks == 2
+    assert output.quality.accepted_attributes == 1
+    assert output.quality.accepted_evidence == 1
+    assert output.quality.accepted_attribute_evidence == 1
+    assert len(importer.document.attributes) == 1
+    assert len(importer.document.evidence) == 1
+    assert len(importer.document.attributes[0].evidence_ids) == 1
+
+
 def test_overlong_attribute_evidence_does_not_drop_valid_siblings():
     long_quote = "甲" * 501
     source = f"第一章 开端\n令狐冲男{long_quote}"

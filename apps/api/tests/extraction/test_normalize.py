@@ -319,3 +319,30 @@ def test_attribute_rejects_invalid_enum_and_evidence_individually():
     assert normalized.attributes == []
     assert normalized.evidence == []
     assert normalized.rejections[0].code == "ATTRIBUTE_EVIDENCE_TOO_LONG"
+
+
+def test_fact_and_attribute_at_same_position_share_evidence_record():
+    chunk = TextChunk("c1", 1, 100, 103, "甲识乙")
+    result = ExtractionResult.model_validate({
+        "entities": [
+            {"local_id": "a", "name": "甲", "type": "Person"},
+            {"local_id": "b", "name": "乙", "type": "Person"},
+        ],
+        "facts": [{
+            "relation": "ALLY_OF",
+            "source_local_id": "a",
+            "target_local_id": "b",
+            "evidence": {"start": 0, "end": 3, "quote": "甲识乙"},
+        }],
+        "attributes": [{
+            "entity_local_id": "a",
+            "property_id": "identity",
+            "value": "甲识乙",
+            "evidence": {"start": 0, "end": 3, "quote": "甲识乙"},
+        }],
+    })
+
+    normalized = normalize_chunk_result("p-1", chunk, result)
+
+    assert len(normalized.evidence) == 1
+    assert normalized.facts[0].evidence_ids == normalized.attributes[0].evidence_ids

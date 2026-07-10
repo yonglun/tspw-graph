@@ -80,9 +80,10 @@ export type AskResponse = {
 
 export type ProjectSummary = { id: string; title: string; is_builtin: boolean; source_encoding?: string; source_size?: number; created_at: string; updated_at: string }
 export type ModelProfile = { id: string; provider: string; base_url: string; model: string; timeout_seconds: number; available: boolean }
-export type JobSnapshot = { id: string; project_id: string; model_profile_id: string; status: string; completed_chunks: number; total_chunks: number; error_code?: string }
+export type JobKind = 'FULL_BUILD' | 'ATTRIBUTE_BACKFILL'
+export type JobSnapshot = { id: string; project_id: string; model_profile_id: string; kind?: JobKind; status: string; completed_chunks: number; total_chunks: number; error_code?: string }
 export type ProjectCreated = { project: ProjectSummary; job: JobSnapshot }
-export type QualityReport = { total_chunks: number; successful_chunks: number; failed_chunks: number; accepted_entities: number; accepted_facts: number; accepted_evidence: number; ambiguous_entities: number; rejected_by_code: Record<string, number>; model_calls: number; retry_count: number }
+export type QualityReport = { total_chunks: number; successful_chunks: number; failed_chunks: number; accepted_entities: number; accepted_facts: number; accepted_evidence: number; accepted_attributes?: number; accepted_attribute_evidence?: number; ambiguous_entities: number; rejected_by_code: Record<string, number>; model_calls: number; retry_count: number }
 
 export type ReviewSummary = {
   open_review_items: number

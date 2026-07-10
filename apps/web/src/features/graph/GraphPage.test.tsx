@@ -48,6 +48,61 @@ describe('GraphPage', () => {
     expect(screen.getByText('嫡派傳人')).toBeVisible()
   })
 
+  it('shows entity attributes, relation summaries and both evidence sections', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/graph/search')) return new Response(JSON.stringify([entity]))
+      if (url.includes('/api/graph/neighborhood')) return new Response(JSON.stringify({ nodes: [entity], edges: [] }))
+      if (url.includes('/api/entities/')) return new Response(JSON.stringify({
+        ...entity,
+        attributes: [{
+          id: 'attr-identity',
+          property_id: 'identity',
+          label: '身份',
+          value_type: 'TEXT',
+          value: '华山派大弟子',
+          confidence: 0.96,
+          evidence: [{ id: 'attr-ev', chapter_id: 'c1', chapter_number: 1, chapter_title: '第一章', start_offset: 10, end_offset: 16, quote: '华山派大弟子' }],
+        }],
+        relations: [{ fact_id: 'fact-1', type: 'MASTER_OF', label: '师父', direction: 'INCOMING', other: { id: 'yue', type: 'Person', name: '岳不群' } }],
+        facts: [{ id: 'fact-1', type: 'MASTER_OF', source_id: 'yue', target_id: entity.id,
+          evidence: [{ id: 'fact-ev', chapter_id: 'c1', chapter_number: 1, chapter_title: '第一章', start_offset: 20, end_offset: 26, quote: '岳不群传剑' }] }],
+      }))
+      return new Response(JSON.stringify({}))
+    }))
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+
+    expect(await screen.findByRole('heading', { name: '本体属性' })).toBeVisible()
+    expect(screen.getByText('身份')).toBeVisible()
+    expect(screen.getAllByText('华山派大弟子').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByRole('heading', { name: '关系摘要' })).toBeVisible()
+    expect(screen.getByText('岳不群')).toBeVisible()
+    expect(screen.getByText('属性证据')).toBeVisible()
+    expect(screen.getByText('关系证据')).toBeVisible()
+    expect(screen.getByRole('button', { name: '加入审核' })).toBeVisible()
+  })
+
+  it('shows an empty attribute state when no attributes were extracted', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/graph/search')) return new Response(JSON.stringify([entity]))
+      if (url.includes('/api/graph/neighborhood')) return new Response(JSON.stringify({ nodes: [entity], edges: [] }))
+      if (url.includes('/api/entities/')) return new Response(JSON.stringify({ ...entity, attributes: [], relations: [], facts: [] }))
+      return new Response(JSON.stringify({}))
+    }))
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+
+    expect(await screen.findByText('尚未抽取到有证据支持的属性')).toBeVisible()
+  })
+
   it('renders the selected center before graph and detail requests finish', async () => {
     const neighborhood = deferredResponse()
     const detail = deferredResponse()

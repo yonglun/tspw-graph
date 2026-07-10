@@ -3,6 +3,8 @@ from typing import Any
 
 from neo4j import Driver, GraphDatabase
 
+from app.graph.importer import canonicalize_attribute_rows
+from app.graph.models import ImportSummary
 from app.settings import Settings
 
 
@@ -42,10 +44,16 @@ RESOLVE_ATTRIBUTE_ENTITIES_QUERY = """
           )
         RETURN collect(candidate) AS candidates
     }
-    WITH hint, stable, candidates
-    WHERE stable IS NOT NULL OR size(candidates) = 1
+    WITH hint,
+         CASE
+           WHEN stable IS NOT NULL THEN stable
+           WHEN size(candidates) = 1 THEN candidates[0]
+           ELSE NULL
+         END AS entity
+    WHERE entity IS NOT NULL
+    SET entity.id = entity.id
     RETURN hint.id AS extracted_id,
-           coalesce(stable.id, candidates[0].id) AS canonical_id
+           entity.id AS canonical_id
 """
 
 
@@ -75,6 +83,7 @@ UPSERT_QUERIES: dict[str, str] = {
         MERGE (n:Evidence {project_id: row.project_id, id: row.id})
         SET n += row
         MERGE (n)-[:IN_CHAPTER]->(c)
+        RETURN n.id AS evidence_id
     """,
     "AttributeAssertion": """
         UNWIND $rows AS row
@@ -82,6 +91,12 @@ UPSERT_QUERIES: dict[str, str] = {
         WHERE entity.id = row.entity_id
           AND entity.type = row.entity_type
           AND coalesce(entity.review_status, 'ACCEPTED') <> 'MERGED'
+          AND all(evidence_id IN row.evidence_ids WHERE EXISTS {
+            MATCH (:Evidence {
+                project_id: row.project_id,
+                id: evidence_id
+            })
+          })
         MERGE (assertion:AttributeAssertion {
             project_id: row.project_id,
             id: row.id
@@ -95,6 +110,7 @@ UPSERT_QUERIES: dict[str, str] = {
             id: evidence_id
         })
         MERGE (assertion)-[:EVIDENCED_BY]->(evidence)
+        RETURN assertion.id AS assertion_id, evidence.id AS evidence_id
     """,
     "Fact": """
         UNWIND $rows AS row
@@ -175,6 +191,89 @@ class Neo4jGraphWriter:
                     hints=hints,
                 )
             }
+
+    def upsert_attribute_bundle(
+        self,
+        project_id: str,
+        hints: list[dict[str, str]],
+        attributes: list[dict[str, Any]],
+        evidence: list[dict[str, Any]],
+        protected_evidence_ids: set[str],
+    ) -> ImportSummary:
+        with self.driver.session() as session:
+            return session.execute_write(
+                self._upsert_attribute_bundle_tx,
+                project_id,
+                hints,
+                attributes,
+                evidence,
+                protected_evidence_ids,
+            )
+
+    def _upsert_attribute_bundle_tx(
+        self,
+        transaction: Any,
+        project_id: str,
+        hints: list[dict[str, str]],
+        attributes: list[dict[str, Any]],
+        evidence: list[dict[str, Any]],
+        protected_evidence_ids: set[str],
+    ) -> ImportSummary:
+        mappings = (
+            {
+                record["extracted_id"]: record["canonical_id"]
+                for record in transaction.run(
+                    RESOLVE_ATTRIBUTE_ENTITIES_QUERY,
+                    project_id=project_id,
+                    hints=hints,
+                )
+            }
+            if hints
+            else {}
+        )
+        resolved_attributes = canonicalize_attribute_rows(
+            project_id, attributes, mappings
+        )
+        attribute_evidence_ids = {
+            evidence_id
+            for attribute in resolved_attributes
+            for evidence_id in attribute["evidence_ids"]
+        }
+        referenced_evidence_ids = protected_evidence_ids | attribute_evidence_ids
+        evidence_rows = [
+            {"project_id": project_id, **row}
+            for row in evidence
+            if row["id"] in referenced_evidence_ids
+        ]
+
+        created_evidence = 0
+        retained_evidence_ids: set[str] = set()
+        for batch in self._batches(evidence_rows):
+            result = transaction.run(UPSERT_QUERIES["Evidence"], rows=batch)
+            retained_evidence_ids.update(
+                record["evidence_id"] for record in result
+            )
+            created_evidence += result.consume().counters.nodes_created
+
+        created_attributes = 0
+        retained_attribute_ids: set[str] = set()
+        retained_attribute_evidence_ids: set[str] = set()
+        for batch in self._batches(resolved_attributes):
+            result = transaction.run(
+                UPSERT_QUERIES["AttributeAssertion"], rows=batch
+            )
+            for record in result:
+                retained_attribute_ids.add(record["assertion_id"])
+                retained_attribute_evidence_ids.add(record["evidence_id"])
+            created_attributes += result.consume().counters.nodes_created
+
+        return ImportSummary(
+            created_evidence=created_evidence,
+            created_attributes=created_attributes,
+            retained_attributes=len(retained_attribute_ids),
+            retained_attribute_evidence=len(retained_attribute_evidence_ids),
+            retained_evidence=len(retained_evidence_ids),
+        )
 
     def _batches(
         self, rows: Sequence[dict[str, Any]]

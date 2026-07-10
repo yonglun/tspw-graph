@@ -2,7 +2,8 @@ from app.extraction.fixed import FixedProvider
 from app.extraction.models import ExtractionResult
 from app.extraction.pipeline import ExtractionPipeline
 from app.extraction.providers import ProviderError, ProviderErrorKind
-from app.graph.importer import GraphImporter
+from app.graph.importer import GraphImporter, canonicalize_attribute_rows
+from app.graph.models import ImportSummary
 
 
 class MemoryWriter:
@@ -16,6 +17,24 @@ class MemoryWriter:
         return len(self.keys[label]) - before
     def resolve_attribute_entities(self, project_id, hints):
         return {hint["id"]: hint["id"] for hint in hints if hint["id"] in self.keys["Entity"]}
+    def upsert_attribute_bundle(self, project_id, hints, attributes, evidence, protected_evidence_ids):
+        resolved = canonicalize_attribute_rows(
+            project_id, attributes, self.resolve_attribute_entities(project_id, hints)
+        )
+        attribute_evidence_ids = {
+            evidence_id for attribute in resolved for evidence_id in attribute["evidence_ids"]
+        }
+        referenced = protected_evidence_ids | attribute_evidence_ids
+        evidence_rows = [
+            {"project_id": project_id, **row} for row in evidence if row["id"] in referenced
+        ]
+        return ImportSummary(
+            created_evidence=self.upsert_batch("Evidence", evidence_rows),
+            created_attributes=self.upsert_batch("AttributeAssertion", resolved),
+            retained_attributes=len(resolved),
+            retained_attribute_evidence=len(attribute_evidence_ids),
+            retained_evidence=len(evidence_rows),
+        )
 
 
 class CapturingWriter(MemoryWriter):
@@ -193,8 +212,9 @@ def test_attribute_only_pipeline_imports_only_attribute_evidence():
         }],
     })
 
-    class RecordingWriter:
+    class RecordingWriter(MemoryWriter):
         def __init__(self):
+            super().__init__()
             self.rows = {}
 
         def ensure_constraints(self):

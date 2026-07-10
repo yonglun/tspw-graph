@@ -9,9 +9,31 @@ from app.projects.repository import ProjectRepository
 from app.projects.files import UploadStore
 from app.projects.service import ProjectUploadService
 from app.extraction.pipeline import ExtractionPipeline
-from app.graph.importer import GraphImporter
+from app.graph.importer import GraphImporter, canonicalize_attribute_rows
+from app.graph.models import ImportSummary
 from app.settings import Settings
 from io import BytesIO
+
+
+def upsert_attribute_bundle(
+    writer, project_id, hints, attributes, evidence, protected_evidence_ids
+):
+    mappings = {hint["id"]: hint["id"] for hint in hints}
+    resolved = canonicalize_attribute_rows(project_id, attributes, mappings)
+    attribute_evidence_ids = {
+        evidence_id for attribute in resolved for evidence_id in attribute["evidence_ids"]
+    }
+    referenced = protected_evidence_ids | attribute_evidence_ids
+    evidence_rows = [
+        {"project_id": project_id, **row} for row in evidence if row["id"] in referenced
+    ]
+    return ImportSummary(
+        created_evidence=writer.upsert_batch("Evidence", evidence_rows),
+        created_attributes=writer.upsert_batch("AttributeAssertion", resolved),
+        retained_attributes=len(resolved),
+        retained_attribute_evidence=len(attribute_evidence_ids),
+        retained_evidence=len(evidence_rows),
+    )
 
 
 class Handler:
@@ -100,6 +122,10 @@ def test_online_handlers_complete_fixed_provider_job(tmp_path):
         def upsert_batch(self, label, rows): return len(rows)
         def resolve_attribute_entities(self, project_id, hints):
             return {hint["id"]: hint["id"] for hint in hints}
+        def upsert_attribute_bundle(self, project_id, hints, attributes, evidence, protected_evidence_ids):
+            return upsert_attribute_bundle(
+                self, project_id, hints, attributes, evidence, protected_evidence_ids
+            )
 
     handlers = OnlineBuildHandlers(
         projects=projects, jobs=jobs, uploads=uploads,
@@ -140,6 +166,11 @@ def test_attribute_backfill_only_writes_attributes_and_their_evidence(tmp_path):
 
         def resolve_attribute_entities(self, project_id, hints):
             return {hint["id"]: hint["id"] for hint in hints}
+
+        def upsert_attribute_bundle(self, project_id, hints, attributes, evidence, protected_evidence_ids):
+            return upsert_attribute_bundle(
+                self, project_id, hints, attributes, evidence, protected_evidence_ids
+            )
 
     writer = RecordingWriter()
     handlers = OnlineBuildHandlers(

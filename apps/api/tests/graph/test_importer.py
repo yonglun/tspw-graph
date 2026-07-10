@@ -1,9 +1,15 @@
 from collections import defaultdict
 from typing import Any
 
-from app.graph.importer import GraphImporter
-from app.graph.models import GraphDocument
-from app.graph.neo4j import CONSTRAINTS, INDEXES, UPSERT_QUERIES
+from app.graph.importer import GraphImporter, canonicalize_attribute_rows
+from app.graph.models import GraphDocument, ImportSummary
+from app.graph.neo4j import (
+    CONSTRAINTS,
+    INDEXES,
+    RESOLVE_ATTRIBUTE_ENTITIES_QUERY,
+    UPSERT_QUERIES,
+    Neo4jGraphWriter,
+)
 
 
 class FakeGraph:
@@ -32,6 +38,32 @@ class FakeGraph:
             return self.resolutions
         entity_ids = self.records["Entity"]
         return {hint["id"]: hint["id"] for hint in hints if hint["id"] in entity_ids}
+
+    def upsert_attribute_bundle(
+        self, project_id, hints, attributes, evidence, protected_evidence_ids
+    ):
+        mappings = self.resolve_attribute_entities(project_id, hints)
+        resolved = canonicalize_attribute_rows(project_id, attributes, mappings)
+        attribute_evidence_ids = {
+            evidence_id
+            for attribute in resolved
+            for evidence_id in attribute["evidence_ids"]
+        }
+        referenced = protected_evidence_ids | attribute_evidence_ids
+        evidence_rows = [
+            {"project_id": project_id, **row}
+            for row in evidence
+            if row["id"] in referenced
+        ]
+        created_evidence = self.upsert_batch("Evidence", evidence_rows)
+        created_attributes = self.upsert_batch("AttributeAssertion", resolved)
+        return ImportSummary(
+            created_evidence=created_evidence,
+            created_attributes=created_attributes,
+            retained_attributes=len(resolved),
+            retained_attribute_evidence=len(attribute_evidence_ids),
+            retained_evidence=len(evidence_rows),
+        )
 
     def count(self, label: str) -> int:
         return len(self.records[label])
@@ -214,8 +246,6 @@ def test_canonical_and_alias_extractions_converge_to_one_assertion() -> None:
 
 
 def test_entity_resolution_query_requires_unique_same_type_non_merged_fallback() -> None:
-    from app.graph.neo4j import RESOLVE_ATTRIBUTE_ENTITIES_QUERY
-
     query = " ".join(RESOLVE_ATTRIBUTE_ENTITIES_QUERY.split())
     assert "stable.type = hint.type" in query
     assert "coalesce(stable.review_status, 'ACCEPTED') <> 'MERGED'" in query
@@ -223,5 +253,106 @@ def test_entity_resolution_query_requires_unique_same_type_non_merged_fallback()
     assert "coalesce(candidate.review_status, 'ACCEPTED') <> 'MERGED'" in query
     assert "candidate.name = hint.name OR hint.name IN coalesce(candidate.aliases, [])" in query
     assert "size(candidates) = 1" in query
-    assert "stable IS NOT NULL" in query
     assert "WHERE stable IS NULL" in query
+    assert "SET entity.id = entity.id" in query
+
+
+def test_attribute_bundle_resolves_locks_and_writes_in_one_transaction() -> None:
+    class Counters:
+        def __init__(self, nodes_created: int) -> None:
+            self.nodes_created = nodes_created
+
+    class Summary:
+        def __init__(self, nodes_created: int) -> None:
+            self.counters = Counters(nodes_created)
+
+    class Result:
+        def __init__(self, records=(), nodes_created=0) -> None:
+            self.records = list(records)
+            self.nodes_created = nodes_created
+
+        def __iter__(self):
+            return iter(self.records)
+
+        def consume(self):
+            return Summary(self.nodes_created)
+
+    class Transaction:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        def run(self, statement, **parameters):
+            self.statements.append(statement)
+            if statement == RESOLVE_ATTRIBUTE_ENTITIES_QUERY:
+                return Result([{"extracted_id": "alias", "canonical_id": "canonical"}])
+            if statement == UPSERT_QUERIES["Evidence"]:
+                return Result([{"evidence_id": "ev-1"}], nodes_created=1)
+            if statement == UPSERT_QUERIES["AttributeAssertion"]:
+                return Result(
+                    [{"assertion_id": "canonical-assertion", "evidence_id": "ev-1"}],
+                    nodes_created=1,
+                )
+            raise AssertionError("unexpected statement")
+
+    class Session:
+        def __init__(self) -> None:
+            self.transaction = Transaction()
+            self.execute_write_calls = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def execute_write(self, callback, *args):
+            self.execute_write_calls += 1
+            return callback(self.transaction, *args)
+
+    class Driver:
+        def __init__(self) -> None:
+            self.fake_session = Session()
+
+        def session(self):
+            return self.fake_session
+
+    driver = Driver()
+    writer = Neo4jGraphWriter(driver)
+
+    summary = writer.upsert_attribute_bundle(
+        "p-1",
+        [{"id": "alias", "name": "令狐冲", "type": "Person"}],
+        [{
+            "id": "transient",
+            "entity_id": "alias",
+            "entity_name": "令狐冲",
+            "entity_type": "Person",
+            "property_id": "identity",
+            "value": "华山派大弟子",
+            "value_type": "TEXT",
+            "confidence": 1.0,
+            "evidence_ids": ["ev-1"],
+        }],
+        [{
+            "id": "ev-1",
+            "chapter_id": "chapter-1",
+            "start_offset": 0,
+            "end_offset": 6,
+            "quote": "华山派大弟子",
+            "text_hash": "hash",
+        }],
+        set(),
+    )
+
+    assert driver.fake_session.execute_write_calls == 1
+    assert driver.fake_session.transaction.statements == [
+        RESOLVE_ATTRIBUTE_ENTITIES_QUERY,
+        UPSERT_QUERIES["Evidence"],
+        UPSERT_QUERIES["AttributeAssertion"],
+    ]
+    assert "SET entity.id = entity.id" in RESOLVE_ATTRIBUTE_ENTITIES_QUERY
+    assert summary.created_attributes == 1
+    assert summary.created_evidence == 1
+    assert summary.retained_attributes == 1
+    assert summary.retained_attribute_evidence == 1
+    assert summary.retained_evidence == 1

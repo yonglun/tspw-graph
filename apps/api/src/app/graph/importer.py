@@ -9,9 +9,14 @@ class GraphWriter(Protocol):
 
     def upsert_batch(self, label: str, rows: list[dict[str, Any]]) -> int: ...
 
-    def resolve_attribute_entities(
-        self, project_id: str, hints: list[dict[str, str]]
-    ) -> dict[str, str]: ...
+    def upsert_attribute_bundle(
+        self,
+        project_id: str,
+        hints: list[dict[str, str]],
+        attributes: list[dict[str, Any]],
+        evidence: list[dict[str, Any]],
+        protected_evidence_ids: set[str],
+    ) -> ImportSummary: ...
 
 
 class GraphImporter:
@@ -38,27 +43,17 @@ class GraphImporter:
                 for entity in document.entities
             ],
         )
-        attributes = self._resolved_attributes(document)
-        referenced_evidence_ids = {
+        fact_evidence_ids = {
             evidence_id
             for fact in document.facts
             for evidence_id in fact.evidence_ids
-        } | {
-            evidence_id
-            for attribute in attributes
-            for evidence_id in attribute["evidence_ids"]
         }
-        created_evidence = self.writer.upsert_batch(
-            "Evidence",
-            [
-                {"project_id": project_id, **item.model_dump()}
-                for item in document.evidence
-                if item.id in referenced_evidence_ids
-            ],
-        )
-        created_attributes = self.writer.upsert_batch(
-            "AttributeAssertion",
-            attributes,
+        attribute_summary = self.writer.upsert_attribute_bundle(
+            project_id,
+            self._attribute_hints(document),
+            [item.model_dump(mode="json") for item in document.attributes],
+            [item.model_dump() for item in document.evidence],
+            fact_evidence_ids,
         )
         created_facts = self.writer.upsert_batch(
             "Fact",
@@ -70,92 +65,68 @@ class GraphImporter:
         return ImportSummary(
             created_entities=created_entities,
             created_facts=created_facts,
-            created_evidence=created_evidence,
-            created_attributes=created_attributes,
-            retained_attributes=len(attributes),
-            retained_attribute_evidence=len(
-                {
-                    evidence_id
-                    for attribute in attributes
-                    for evidence_id in attribute["evidence_ids"]
-                }
-            ),
-            retained_evidence=len(referenced_evidence_ids),
+            created_evidence=attribute_summary.created_evidence,
+            created_attributes=attribute_summary.created_attributes,
+            retained_attributes=attribute_summary.retained_attributes,
+            retained_attribute_evidence=attribute_summary.retained_attribute_evidence,
+            retained_evidence=attribute_summary.retained_evidence,
         )
 
     def import_attributes(self, document: GraphDocument) -> ImportSummary:
         self.writer.ensure_constraints()
         project_id = document.project.id
-        attributes = self._resolved_attributes(document)
-        referenced_evidence_ids = {
-            evidence_id
-            for attribute in attributes
-            for evidence_id in attribute["evidence_ids"]
-        }
-        created_evidence = self.writer.upsert_batch(
-            "Evidence",
-            [
-                {"project_id": project_id, **item.model_dump()}
-                for item in document.evidence
-                if item.id in referenced_evidence_ids
-            ],
-        )
-        created_attributes = self.writer.upsert_batch(
-            "AttributeAssertion",
-            attributes,
-        )
-        return ImportSummary(
-            created_evidence=created_evidence,
-            created_attributes=created_attributes,
-            retained_attributes=len(attributes),
-            retained_attribute_evidence=len(referenced_evidence_ids),
-            retained_evidence=len(referenced_evidence_ids),
+        return self.writer.upsert_attribute_bundle(
+            project_id,
+            self._attribute_hints(document),
+            [item.model_dump(mode="json") for item in document.attributes],
+            [item.model_dump() for item in document.evidence],
+            set(),
         )
 
-    def _resolved_attributes(self, document: GraphDocument) -> list[dict[str, Any]]:
-        project_id = document.project.id
+    @staticmethod
+    def _attribute_hints(document: GraphDocument) -> list[dict[str, str]]:
         attribute_entity_ids = {
             attribute.entity_id for attribute in document.attributes
         }
-        mappings = self.writer.resolve_attribute_entities(
-            project_id,
-            [
-                {
-                    "id": entity.id,
-                    "name": entity.name,
-                    "type": entity.type.value,
-                }
-                for entity in document.entities
-                if entity.id in attribute_entity_ids
-            ],
-        )
-        resolved: dict[str, dict[str, Any]] = {}
-        for attribute in document.attributes:
-            canonical_id = mappings.get(attribute.entity_id)
-            if canonical_id is None:
-                continue
-            digest = hashlib.sha256(
-                "|".join(
-                    (
-                        project_id,
-                        canonical_id,
-                        attribute.property_id,
-                        attribute.value,
-                    )
-                ).encode()
-            ).hexdigest()[:16]
-            assertion_id = f"{project_id}:attribute:{digest}"
-            row = {
-                "project_id": project_id,
-                **attribute.model_dump(mode="json"),
-                "id": assertion_id,
-                "entity_id": canonical_id,
-            }
-            existing = resolved.get(assertion_id)
-            if existing is None:
-                resolved[assertion_id] = row
-            else:
-                existing["evidence_ids"] = sorted(
-                    set(existing["evidence_ids"] + row["evidence_ids"])
+        return [
+            {"id": entity.id, "name": entity.name, "type": entity.type.value}
+            for entity in document.entities
+            if entity.id in attribute_entity_ids
+        ]
+
+
+def canonicalize_attribute_rows(
+    project_id: str,
+    attributes: list[dict[str, Any]],
+    mappings: dict[str, str],
+) -> list[dict[str, Any]]:
+    resolved: dict[str, dict[str, Any]] = {}
+    for attribute in attributes:
+        canonical_id = mappings.get(attribute["entity_id"])
+        if canonical_id is None:
+            continue
+        digest = hashlib.sha256(
+            "|".join(
+                (
+                    project_id,
+                    canonical_id,
+                    attribute["property_id"],
+                    attribute["value"],
                 )
-        return list(resolved.values())
+            ).encode()
+        ).hexdigest()[:16]
+        assertion_id = f"{project_id}:attribute:{digest}"
+        row = {
+            "project_id": project_id,
+            **attribute,
+            "id": assertion_id,
+            "entity_id": canonical_id,
+        }
+        existing = resolved.get(assertion_id)
+        if existing is None:
+            resolved[assertion_id] = row
+        else:
+            existing["evidence_ids"] = sorted(
+                set(existing["evidence_ids"] + row["evidence_ids"])
+            )
+    return list(resolved.values())

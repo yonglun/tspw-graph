@@ -20,10 +20,10 @@ A separate quality regression test failed with `accepted_attributes == 1` instea
 
 ### GREEN
 
-- Added `GraphWriter.resolve_attribute_entities(project_id, hints)` and an explicit implementation on every fake.
+- Added atomic `GraphWriter.upsert_attribute_bundle(...)` behavior and an explicit implementation on every fake.
 - Stable same-type, non-merged ID matches take priority.
 - Exact existing name/alias fallback is retained only when `size(candidates) = 1`; ambiguous and missing matches return no mapping.
-- `GraphImporter` resolves only attribute-bearing entity hints, replaces transient entity IDs, recomputes assertion IDs from project/canonical entity/property/normalized value, merges convergent evidence IDs, and filters evidence before writing.
+- `GraphImporter` passes only attribute-bearing entity hints plus raw attribute/evidence rows to the atomic writer. The Neo4j transaction resolves and write-locks canonical entities, recomputes assertion IDs, merges convergent evidence IDs, filters evidence, and writes evidence/assertions before committing.
 - Full builds resolve after entity upsert; backfills never upsert entities or facts.
 - Added retained assertion/evidence counts to `ImportSummary` so quality reports describe accepted rows, not pre-resolution candidates.
 
@@ -126,7 +126,7 @@ Files: `apps/api/src/app/extraction/normalize.py`, `apps/api/tests/extraction/te
 
 ## Architectural choices
 
-- Resolution is a narrow graph-writer boundary because Neo4j owns canonical entity state; the importer owns filtering, identity recomputation, evidence selection, and quality counts.
+- Resolution, canonical identity recomputation, evidence selection, writes, and retained counts are one graph-writer transaction because Neo4j owns canonical entity state. The resolver obtains a write lock with a no-op canonical entity `SET`, preventing review merges from interleaving before evidence/assertion persistence.
 - Attribute upsert now accepts canonical IDs only and performs no fallback selection, eliminating the evidence-before-resolution race and lexicographic ambiguity.
 - `ImportSummary.retained_*` counts separate accepted batch contents from Neo4j `nodes_created`, preserving idempotent created counts while making quality metrics accurate.
 - Path safety is centralized in `UploadStore` instead of reconstructing configured-root logic in the endpoint.
@@ -158,7 +158,7 @@ git diff --check
 
 Final run results:
 
-- Backend: `112 passed, 5 skipped`; skips are pre-existing Neo4j-gated tests in `test_live_api.py` and `test_review_filters.py`. No test was newly skipped or disabled.
+- Backend: `113 passed, 5 skipped`; skips are pre-existing Neo4j-gated tests in `test_live_api.py` and `test_review_filters.py`. No test was newly skipped or disabled.
 - Frontend: `23 passed`.
 - Typecheck: exit 0.
 - Production build: exit 0; 65 modules transformed.
@@ -167,3 +167,7 @@ Final run results:
 ## Concerns
 
 - The current environment has no live Neo4j test service, so the pre-existing Neo4j-gated integration tests remain skipped. Query-contract and fake-driver regressions cover the changed Cypher shape; a live Neo4j integration run remains advisable when that external service is available.
+
+## Follow-up atomicity regression
+
+An independent review identified that resolution, Evidence writes, and AttributeAssertion writes could previously commit in separate transactions. The regression `test_attribute_bundle_resolves_locks_and_writes_in_one_transaction` failed with `AttributeError` before the atomic writer existed. It now proves one `session.execute_write` call contains the locking resolver, Evidence query, and AttributeAssertion query, and that retained counts come from actual transaction result IDs. Focused extraction/graph/worker result: `90 passed, 5 pre-existing skips`; full required backend result: `113 passed, 5 pre-existing skips`.

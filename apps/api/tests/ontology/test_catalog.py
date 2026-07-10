@@ -43,6 +43,12 @@ def test_person_exposes_typed_property_definitions(client: TestClient) -> None:
     body = client.get("/api/ontology").json()
     person = next(item for item in body["entity_types"] if item["id"] == "Person")
 
+    assert {item["id"] for item in person["property_definitions"]} == {
+        "gender",
+        "honorific",
+        "identity",
+        "life_status",
+    }
     assert {item["id"] for item in person["effective_property_definitions"]} >= {
         "gender",
         "honorific",
@@ -59,10 +65,17 @@ def test_person_exposes_typed_property_definitions(client: TestClient) -> None:
         for item in person["effective_property_definitions"]
         if item["id"] == "gender"
     )
+    life_status = next(
+        item
+        for item in person["effective_property_definitions"]
+        if item["id"] == "life_status"
+    )
     assert honorific["value_type"] == "TEXT"
     assert honorific["multiple"] is True
     assert gender["value_type"] == "ENUM"
     assert gender["enum_values"] == ["男", "女"]
+    assert life_status["value_type"] == "ENUM"
+    assert life_status["enum_values"] == ["在世", "死亡"]
 
 
 def test_swordplay_inherits_martial_art_properties() -> None:

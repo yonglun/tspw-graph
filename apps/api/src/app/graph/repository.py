@@ -6,6 +6,14 @@ from app.settings import Settings
 
 
 class GraphRepository(Protocol):
+    def search_exact(
+        self, project_id: str, query: str, types: list[str], limit: int
+    ) -> list[dict[str, Any]]: ...
+
+    def search_contains(
+        self, project_id: str, query: str, types: list[str], limit: int
+    ) -> list[dict[str, Any]]: ...
+
     def search(
         self, project_id: str, query: str, types: list[str], limit: int
     ) -> list[dict[str, Any]]: ...
@@ -30,14 +38,49 @@ class Neo4jGraphRepository:
     def search(
         self, project_id: str, query: str, types: list[str], limit: int
     ) -> list[dict[str, Any]]:
+        exact = self.search_exact(project_id, query, types, limit)
+        if len(exact) >= limit:
+            return exact[:limit]
+        contains = self.search_contains(
+            project_id, query, types, limit - len(exact)
+        )
+        unique = {row["id"]: row for row in exact}
+        for row in contains:
+            unique.setdefault(row["id"], row)
+        return list(unique.values())[:limit]
+
+    def search_exact(
+        self, project_id: str, query: str, types: list[str], limit: int
+    ) -> list[dict[str, Any]]:
+        statement = """
+            MATCH (n:Entity)
+            WHERE n.project_id = $project_id AND n.name = $search_text
+              AND (size($types) = 0 OR n.type IN $types)
+              AND coalesce(n.review_status, 'ACCEPTED') <> 'MERGED'
+            RETURN properties(n) AS entity
+            ORDER BY n.id
+            LIMIT $limit
+        """
+        return self._entities(
+            statement,
+            project_id=project_id,
+            search_text=query,
+            types=types,
+            limit=limit,
+        )
+
+    def search_contains(
+        self, project_id: str, query: str, types: list[str], limit: int
+    ) -> list[dict[str, Any]]:
         statement = """
             MATCH (n:Entity {project_id: $project_id})
             WHERE (toLower(n.name) CONTAINS toLower($search_text)
                 OR any(alias IN coalesce(n.aliases, []) WHERE toLower(alias) CONTAINS toLower($search_text)))
+              AND n.name <> $search_text
               AND (size($types) = 0 OR n.type IN $types)
               AND coalesce(n.review_status, 'ACCEPTED') <> 'MERGED'
             RETURN properties(n) AS entity
-            ORDER BY CASE WHEN n.name = $search_text THEN 0 ELSE 1 END, n.name
+            ORDER BY n.name, n.id
             LIMIT $limit
         """
         return self._entities(
@@ -56,10 +99,26 @@ class Neo4jGraphRepository:
         limit: int,
         from_chapter: int | None,
         to_chapter: int | None,
-    ) -> dict[str, list[dict[str, Any]]]:
-        statement = f"""
-            MATCH p=(center:Entity {{project_id: $project_id, id: $entity_id}})
-                -[rels:RELATED*1..{depth}]-(other:Entity {{project_id: $project_id}})
+    ) -> dict[str, list[dict[str, Any]]] | None:
+        if depth == 1:
+            statement = """
+                MATCH (center:Entity {project_id: $project_id, id: $entity_id})
+                WHERE coalesce(center.review_status, 'ACCEPTED') <> 'MERGED'
+                OPTIONAL MATCH (center)-[edge:RELATED]-(other:Entity {project_id: $project_id})
+                WHERE coalesce(edge.review_status, 'ACCEPTED') <> 'REJECTED'
+                  AND ($from_chapter IS NULL OR edge.to_chapter IS NULL OR edge.to_chapter >= $from_chapter)
+                  AND ($to_chapter IS NULL OR edge.from_chapter IS NULL OR edge.from_chapter <= $to_chapter)
+                  AND coalesce(other.review_status, 'ACCEPTED') <> 'MERGED'
+                WITH center, edge, other
+                ORDER BY edge.id
+                WITH center, collect(edge)[..$limit] AS edges,
+                    collect(other)[..$limit] AS others
+                RETURN [center] + others AS nodes, edges
+            """
+        elif depth == 2:
+            statement = """
+            MATCH p=(center:Entity {project_id: $project_id, id: $entity_id})
+                -[rels:RELATED*1..2]-(other:Entity {project_id: $project_id})
             WHERE all(r IN rels WHERE
                 coalesce(r.review_status, 'ACCEPTED') <> 'REJECTED'
                 AND ($from_chapter IS NULL OR r.to_chapter IS NULL OR r.to_chapter >= $from_chapter)
@@ -70,7 +129,9 @@ class Neo4jGraphRepository:
             RETURN
                 reduce(ns = [], p IN paths | ns + nodes(p)) AS nodes,
                 reduce(rs = [], p IN paths | rs + relationships(p)) AS edges
-        """
+            """
+        else:
+            raise ValueError("depth must be 1 or 2")
         with self.driver.session() as session:
             record = session.run(
                 statement,
@@ -81,7 +142,7 @@ class Neo4jGraphRepository:
                 to_chapter=to_chapter,
             ).single()
             if record is None:
-                return {"nodes": [], "edges": []}
+                return None
             nodes = {node["id"]: dict(node) for node in record["nodes"]}
             edges = {
                 edge["id"]: {

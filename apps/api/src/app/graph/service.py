@@ -22,11 +22,19 @@ class GraphService:
     def search(
         self, project_id: str, query: str, types: list[str], limit: int
     ) -> list[EntitySummary]:
-        return [
-            EntitySummary.model_validate(row)
-            for row in self.repository.search(project_id, query, types, limit)
-            if row.get("project_id") == project_id
-        ]
+        exact_rows = self._project_rows(
+            self.repository.search_exact(project_id, query, types, limit), project_id
+        )
+        rows = self._deduplicate(exact_rows)[:limit]
+        if len(rows) < limit:
+            contains_rows = self._project_rows(
+                self.repository.search_contains(
+                    project_id, query, types, limit - len(rows)
+                ),
+                project_id,
+            )
+            rows = self._deduplicate([*rows, *contains_rows])[:limit]
+        return [EntitySummary.model_validate(row) for row in rows]
 
     def neighborhood(
         self,
@@ -37,8 +45,6 @@ class GraphService:
         from_chapter: int | None,
         to_chapter: int | None,
     ) -> Neighborhood:
-        if not self.repository.entity_exists(project_id, entity_id):
-            raise EntityNotFoundError(entity_id)
         result = self.repository.neighborhood(
             project_id,
             entity_id,
@@ -47,6 +53,8 @@ class GraphService:
             from_chapter,
             to_chapter,
         )
+        if result is None:
+            raise EntityNotFoundError(entity_id)
         return Neighborhood(
             nodes=[EntitySummary.model_validate(row) for row in result["nodes"]],
             edges=[
@@ -55,6 +63,21 @@ class GraphService:
                 if row.get("review_status") != "REJECTED"
             ],
         )
+
+    @staticmethod
+    def _project_rows(
+        rows: list[dict[str, Any]], project_id: str
+    ) -> list[dict[str, Any]]:
+        return [row for row in rows if row.get("project_id") == project_id]
+
+    @staticmethod
+    def _deduplicate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        unique: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            entity_id = row.get("id")
+            if isinstance(entity_id, str) and entity_id not in unique:
+                unique[entity_id] = row
+        return list(unique.values())
 
     def shortest_path(
         self, project_id: str, source_id: str, target_id: str, max_depth: int

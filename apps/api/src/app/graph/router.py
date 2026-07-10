@@ -1,23 +1,17 @@
-from collections.abc import Iterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 from app.graph.models import EntityDetail, EntitySummary, Neighborhood, TimelineEvent
 from app.graph.repository import Neo4jGraphRepository
 from app.graph.service import EntityNotFoundError, GraphService
-from app.settings import get_settings
 
 router = APIRouter(tags=["graph"])
 
 
-def get_repository() -> Iterator[Neo4jGraphRepository]:
-    repository = Neo4jGraphRepository.from_settings(get_settings())
-    try:
-        yield repository
-    finally:
-        repository.close()
+def get_repository(request: Request) -> Neo4jGraphRepository:
+    return Neo4jGraphRepository(request.app.state.neo4j_driver)
 
 
 Repository = Annotated[Neo4jGraphRepository, Depends(get_repository)]
@@ -101,4 +95,3 @@ def entity_detail(
     repository: Repository, entity_id: str, project_id: str
 ) -> EntityDetail:
     return execute(lambda: GraphService(repository).entity_detail(project_id, entity_id))
-

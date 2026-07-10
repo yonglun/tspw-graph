@@ -1,23 +1,23 @@
+from unittest.mock import Mock, patch
+
 from fastapi.testclient import TestClient
 
 from app.graph.router import get_repository
 from app.main import app
 
 
-def test_neighborhood_rejects_unbounded_depth(client: TestClient) -> None:
-    response = client.get(
-        "/api/graph/neighborhood",
-        params={"project_id": "xiaoao", "entity_id": "x", "depth": 4},
-    )
+def test_neighborhood_rejects_unbounded_depth() -> None:
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/graph/neighborhood",
+            params={"project_id": "xiaoao", "entity_id": "x", "depth": 4},
+        )
 
     assert response.status_code == 422
 
 
 def test_neighborhood_filters_rejected_edges_at_service_boundary() -> None:
     class Repository:
-        def entity_exists(self, project_id: str, entity_id: str) -> bool:
-            return True
-
         def neighborhood(
             self,
             project_id: str,
@@ -71,10 +71,39 @@ def test_neighborhood_filters_rejected_edges_at_service_boundary() -> None:
     assert all(edge["id"] != "fact-rejected" for edge in response.json()["edges"])
 
 
-def test_search_rejects_excessive_limit(client: TestClient) -> None:
-    response = client.get(
-        "/api/graph/search",
-        params={"project_id": "xiaoao", "query": "令狐", "limit": 51},
-    )
+def test_search_rejects_excessive_limit() -> None:
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/graph/search",
+            params={"project_id": "xiaoao", "query": "令狐", "limit": 51},
+        )
 
     assert response.status_code == 422
+
+
+def test_app_lifespan_reuses_and_closes_one_neo4j_driver() -> None:
+    driver = Mock()
+
+    with patch("app.main.GraphDatabase.driver", return_value=driver) as create_driver:
+        with TestClient(app) as client:
+            first = client.get("/api/health")
+            second = client.get("/api/health")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    create_driver.assert_called_once()
+    driver.close.assert_called_once_with()
+
+
+def test_get_repository_wraps_shared_driver_without_owning_it() -> None:
+    driver = Mock()
+    request = Mock()
+    request.app.state.neo4j_driver = driver
+
+    first = get_repository(request)
+    second = get_repository(request)
+
+    assert first is not second
+    assert first.driver is driver
+    assert second.driver is driver
+    driver.close.assert_not_called()

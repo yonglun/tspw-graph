@@ -20,11 +20,10 @@ class FixedProvider:
     def _fixture_result(text: str) -> ExtractionResult:
         relation_quote = "测试人物甲认识测试人物乙"
         relation_start = text.find(relation_quote)
+        identity_phrase = "测试人物甲是华山派大弟子"
+        identity_phrase_start = text.find(identity_phrase)
         identity_value = "华山派大弟子"
-        identity_start = text.find(identity_value)
-        has_person_a = relation_start >= 0 or (
-            identity_start >= 0 and "测试人物甲" in text
-        )
+        has_person_a = relation_start >= 0 or identity_phrase_start >= 0
 
         entities = []
         if has_person_a:
@@ -52,7 +51,8 @@ class FixedProvider:
             )
 
         attributes = []
-        if has_person_a and identity_start >= 0:
+        if identity_phrase_start >= 0:
+            identity_start = identity_phrase_start + len("测试人物甲是")
             attributes.append(
                 CandidateAttribute(
                     entity_local_id="person-a",

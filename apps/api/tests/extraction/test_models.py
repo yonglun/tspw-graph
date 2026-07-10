@@ -118,6 +118,31 @@ def test_extraction_result_accepts_overlong_model_evidence_for_downstream_reject
     assert result.facts[0].evidence.quote == long_quote
 
 
+def test_extraction_result_accepts_overlong_attribute_evidence_for_downstream_rejection():
+    long_quote = "华山派大弟子" * 100
+    result = ExtractionResult.model_validate(
+        {
+            "entities": [],
+            "facts": [],
+            "attributes": [
+                {
+                    "entity_local_id": "p1",
+                    "property_id": "identity",
+                    "value": "华山派大弟子",
+                    "evidence": {
+                        "start": 0,
+                        "end": len(long_quote),
+                        "quote": long_quote,
+                    },
+                    "confidence": 0.5,
+                }
+            ],
+        }
+    )
+
+    assert result.attributes[0].evidence.quote == long_quote
+
+
 def test_extraction_result_accepts_blank_entity_fields_for_downstream_rejection():
     result = ExtractionResult.model_validate(
         {

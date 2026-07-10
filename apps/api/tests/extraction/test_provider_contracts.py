@@ -66,6 +66,19 @@ def test_fixed_provider_only_emits_attributes_for_supported_property_phrase():
     assert supported_text[evidence.start : evidence.end] == evidence.quote
 
 
+def test_fixed_provider_does_not_join_unrelated_identity_substrings():
+    result = FixedProvider().extract(
+        ExtractionRequest(
+            project_id="p-1",
+            chunk_id="c-1",
+            text="测试人物甲来到山脚，华山派大弟子另有其人。",
+            ontology={"entity_types": ["Person"]},
+        )
+    )
+
+    assert result.attributes == []
+
+
 def test_openai_provider_uses_json_schema_and_bearer_auth():
     captured = {}
 

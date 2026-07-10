@@ -72,6 +72,8 @@ def extraction_system_prompt(request: ExtractionRequest) -> str:
             "- 如果关系类型不在允许列表中，不要输出该 fact。",
             "- 属性只允许使用上述属性 ID，且必须属于对应实体类型。",
             "- 存在关系类型时，不要把另一个实体作为属性值；应输出 fact。",
+            "- 师父/徒弟、丈夫/妻子/配偶、成员/所属、掌握武学、参与事件、持有物品"
+            "都必须建模为关系，不能作为 identity、honorific 或其他属性值。",
             "- 不确定的属性值不要输出，不要使用“未知”等占位值。",
             "- attribute 的 evidence.quote 只取能证明属性值的最短原文片段，"
             "并且必须逐字等于 text[start:end]。",

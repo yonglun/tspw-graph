@@ -73,6 +73,7 @@ def test_upload_creates_project_and_queued_job(tmp_path):
     assert response.status_code == 201
     assert response.json()["project"]["title"] == "上传小说"
     assert response.json()["job"]["status"] == "QUEUED"
+    assert response.json()["job"]["kind"] == "FULL_BUILD"
 
 
 def test_upload_rejects_unknown_profile_and_wrong_type(tmp_path):

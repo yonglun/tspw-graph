@@ -9,7 +9,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 
-from app.jobs.models import InvalidJobTransition, Job, JobStatus, TERMINAL_STATUSES
+from app.jobs.models import (
+    TERMINAL_STATUSES,
+    InvalidJobTransition,
+    Job,
+    JobKind,
+    JobStatus,
+)
 from app.jobs.repository import JobRepository
 from app.jobs.service import JobNotFoundError, JobService, QualityNotReadyError
 from app.settings import get_settings
@@ -22,6 +28,7 @@ class JobSnapshot(BaseModel):
     id: str
     project_id: str
     model_profile_id: str
+    kind: JobKind
     status: JobStatus
     completed_chunks: int
     total_chunks: int

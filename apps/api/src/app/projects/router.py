@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 
 from app.graph.neo4j import Neo4jGraphWriter
+from app.jobs.models import JobKind
 from app.jobs.repository import JobRepository
 from app.jobs.router import JobSnapshot
 from app.projects.files import InvalidUpload, UploadStore
@@ -37,6 +38,10 @@ class ProjectSummary(BaseModel):
 class ProjectCreated(BaseModel):
     project: ProjectSummary
     job: JobSnapshot
+
+
+class AttributeJobRequest(BaseModel):
+    model_profile_id: str
 
 
 def get_project_service() -> Iterator[ProjectService]:
@@ -103,6 +108,37 @@ def upload_project(
         project=ProjectSummary.model_validate(project),
         job=JobSnapshot.model_validate(job),
     )
+
+
+@router.post(
+    "/{project_id}/attribute-jobs",
+    status_code=status.HTTP_201_CREATED,
+    response_model=JobSnapshot,
+)
+def create_attribute_job(
+    project_id: str,
+    request: AttributeJobRequest,
+    service: Service,
+    jobs: Jobs,
+) -> JobSnapshot:
+    try:
+        project = service.get(project_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(
+            status_code=404, detail={"code": "PROJECT_NOT_FOUND"}
+        ) from error
+    if not project.source_path:
+        raise HTTPException(409, detail={"code": "PROJECT_SOURCE_MISSING"})
+    if request.model_profile_id not in {
+        profile.id for profile in get_settings().model_profiles
+    }:
+        raise HTTPException(422, detail={"code": "UNKNOWN_MODEL_PROFILE"})
+    job = jobs.create(
+        project_id,
+        request.model_profile_id,
+        JobKind.ATTRIBUTE_BACKFILL,
+    )
+    return JobSnapshot.model_validate(job)
 
 
 @router.get("", response_model=list[ProjectSummary])

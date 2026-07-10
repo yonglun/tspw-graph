@@ -1,10 +1,17 @@
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import Engine, func, or_, select, text
+from sqlalchemy import Engine, func, inspect, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.jobs.models import Job, JobEvent, JobQuality, JobStatus, TERMINAL_STATUSES
+from app.jobs.models import (
+    TERMINAL_STATUSES,
+    Job,
+    JobEvent,
+    JobKind,
+    JobQuality,
+    JobStatus,
+)
 from app.projects.models import Base
 
 
@@ -15,10 +22,33 @@ class JobRepository:
         self.engine = engine
         self.clock = clock or (lambda: datetime.now(UTC))
         Base.metadata.create_all(engine)
+        self._upgrade_job_kind_schema()
 
-    def create(self, project_id: str, model_profile_id: str) -> Job:
+    def _upgrade_job_kind_schema(self) -> None:
+        if self.engine.dialect.name != "sqlite":
+            return
+        columns = {item["name"] for item in inspect(self.engine).get_columns("jobs")}
+        if "kind" not in columns:
+            with self.engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE jobs ADD COLUMN kind VARCHAR(30) "
+                        "NOT NULL DEFAULT 'FULL_BUILD'"
+                    )
+                )
+
+    def create(
+        self,
+        project_id: str,
+        model_profile_id: str,
+        kind: JobKind = JobKind.FULL_BUILD,
+    ) -> Job:
         with Session(self.engine) as session:
-            job = Job(project_id=project_id, model_profile_id=model_profile_id)
+            job = Job(
+                project_id=project_id,
+                model_profile_id=model_profile_id,
+                kind=kind,
+            )
             session.add(job)
             session.commit()
             session.refresh(job)
@@ -126,6 +156,7 @@ class JobRepository:
                         "id": job.id,
                         "project_id": job.project_id,
                         "model_profile_id": job.model_profile_id,
+                        "kind": str(job.kind),
                         "status": str(job.status),
                         "completed_chunks": job.completed_chunks,
                         "total_chunks": job.total_chunks,

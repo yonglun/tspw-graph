@@ -22,6 +22,11 @@ class JobStatus(StrEnum):
     COMPLETED = "COMPLETED"
 
 
+class JobKind(StrEnum):
+    FULL_BUILD = "FULL_BUILD"
+    ATTRIBUTE_BACKFILL = "ATTRIBUTE_BACKFILL"
+
+
 TERMINAL_STATUSES = {JobStatus.CANCELLED, JobStatus.FAILED, JobStatus.COMPLETED}
 
 ALLOWED_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
@@ -64,6 +69,9 @@ class Job(Base):
         ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False
     )
     model_profile_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    kind: Mapped[JobKind] = mapped_column(
+        String(30), default=JobKind.FULL_BUILD, nullable=False
+    )
     status: Mapped[JobStatus] = mapped_column(
         String(30), default=JobStatus.QUEUED, nullable=False
     )

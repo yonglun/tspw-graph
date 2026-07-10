@@ -1,7 +1,41 @@
 import pytest
 from pydantic import ValidationError
 
-from app.extraction.models import ExtractionResult
+from app.extraction.models import ExtractionResult, strict_extraction_schema
+
+
+def test_extraction_result_accepts_evidence_backed_attribute():
+    result = ExtractionResult.model_validate(
+        {
+            "entities": [
+                {
+                    "local_id": "p1",
+                    "name": "令狐冲",
+                    "type": "Person",
+                    "aliases": [],
+                }
+            ],
+            "facts": [],
+            "attributes": [
+                {
+                    "entity_local_id": "p1",
+                    "property_id": "identity",
+                    "value": "华山派大弟子",
+                    "evidence": {"start": 0, "end": 6, "quote": "华山派大弟子"},
+                    "confidence": 0.96,
+                }
+            ],
+        }
+    )
+
+    assert result.attributes[0].property_id == "identity"
+
+
+def test_strict_schema_requires_attributes_at_root():
+    schema = strict_extraction_schema()
+
+    assert schema["required"] == ["entities", "facts", "attributes"]
+    assert schema["properties"]["attributes"]["items"]["additionalProperties"] is False
 
 
 def test_extraction_result_rejects_excessive_entities():
@@ -125,3 +159,24 @@ def test_evidence_offsets_and_quote_must_match_chunk():
     )
     with pytest.raises(ValueError, match="EVIDENCE_QUOTE_MISMATCH"):
         result.validate_for_chunk("正确")
+
+
+def test_attribute_evidence_offsets_and_quote_must_match_chunk():
+    result = ExtractionResult.model_validate(
+        {
+            "entities": [],
+            "facts": [],
+            "attributes": [
+                {
+                    "entity_local_id": "p1",
+                    "property_id": "identity",
+                    "value": "大弟子",
+                    "evidence": {"start": 0, "end": 3, "quote": "大弟子"},
+                    "confidence": 0.9,
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="EVIDENCE_QUOTE_MISMATCH"):
+        result.validate_for_chunk("掌门人")

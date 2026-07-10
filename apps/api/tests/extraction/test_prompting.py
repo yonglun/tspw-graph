@@ -21,3 +21,20 @@ def test_extraction_prompt_includes_relation_labels_and_direction_rules():
     assert "妻子" in prompt
     assert "start/end 必须精确定位 quote" in prompt
     assert "quote 必须少于 500 字" in prompt
+
+
+def test_extraction_prompt_includes_effective_property_contract_and_rules():
+    prompt = extraction_system_prompt(
+        ExtractionRequest(
+            project_id="p-1",
+            chunk_id="c-1",
+            text="令狐冲是华山派大弟子。",
+            ontology={"entity_types": ["Person"], "relation_types": []},
+        )
+    )
+
+    assert "- Person.identity（身份，TEXT，可多值）：人物的身份或社会角色" in prompt
+    assert "只允许使用上述属性 ID" in prompt
+    assert "存在关系类型时，不要把另一个实体作为属性值" in prompt
+    assert "不确定的属性值不要输出" in prompt
+    assert "能证明属性值的最短原文片段" in prompt

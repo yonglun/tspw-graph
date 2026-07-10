@@ -3,6 +3,7 @@ import json
 import httpx
 import pytest
 
+from app.extraction.fixed import FixedProvider
 from app.extraction.models import ExtractionRequest
 from app.extraction.azure_openai import AzureOpenAIProvider
 from app.extraction.ollama import OllamaProvider
@@ -16,6 +17,7 @@ FIXED = json.dumps(
             {"local_id": "p1", "name": "令狐冲", "type": "Person", "aliases": []}
         ],
         "facts": [],
+        "attributes": [],
     },
     ensure_ascii=False,
 )
@@ -37,6 +39,31 @@ def assert_strict_schema(schema):
             assert_strict_schema(child)
     if schema.get("type") == "array":
         assert_strict_schema(schema["items"])
+
+
+def test_fixed_provider_only_emits_attributes_for_supported_property_phrase():
+    unsupported = FixedProvider().extract(
+        ExtractionRequest(
+            project_id="p-1",
+            chunk_id="c-1",
+            text="测试人物甲来到山脚。",
+            ontology={"entity_types": ["Person"]},
+        )
+    )
+    supported_text = "测试人物甲是华山派大弟子。"
+    supported = FixedProvider().extract(
+        ExtractionRequest(
+            project_id="p-1",
+            chunk_id="c-2",
+            text=supported_text,
+            ontology={"entity_types": ["Person"]},
+        )
+    )
+
+    assert unsupported.attributes == []
+    assert supported.attributes[0].property_id == "identity"
+    evidence = supported.attributes[0].evidence
+    assert supported_text[evidence.start : evidence.end] == evidence.quote
 
 
 def test_openai_provider_uses_json_schema_and_bearer_auth():

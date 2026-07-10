@@ -1,5 +1,6 @@
 from app.extraction.models import ExtractionRequest
 from app.ontology.catalog import CATALOG, relation_by_id
+from app.ontology.properties import property_definitions_for
 
 
 RELATION_HINTS = {
@@ -38,6 +39,17 @@ def extraction_system_prompt(request: ExtractionRequest) -> str:
             f"- {relation.id.value}: {relation.label}。{relation.description} "
             f"({source_types} -> {target_types})。{hint}"
         )
+    properties = []
+    for entity_type in CATALOG.entity_types:
+        if entity_ids and entity_type.id.value not in entity_ids:
+            continue
+        for property_definition in property_definitions_for(entity_type.id):
+            cardinality = "可多值" if property_definition.multiple else "单值"
+            properties.append(
+                f"- {entity_type.id.value}.{property_definition.id}"
+                f"（{property_definition.label}，{property_definition.value_type.value}，"
+                f"{cardinality}）：{property_definition.description}。"
+            )
 
     return "\n".join(
         [
@@ -50,11 +62,18 @@ def extraction_system_prompt(request: ExtractionRequest) -> str:
             *entities,
             "关系类型和方向规则：",
             *relations,
+            "实体属性：",
+            *properties,
             "抽取要求：",
             "- 实体 name 必须是文本中出现的非空名称；不确定名称时不要输出该实体。",
             "- 如果文本说“X的师父是Y”，输出 MASTER_OF: Y -> X。",
             "- 如果文本说“Y是X的师父”，输出 MASTER_OF: Y -> X。",
             "- 如果文本说“X是Y的妻子/夫人”或“Y的妻子是X”，输出 SPOUSE_OF: X -> Y。",
             "- 如果关系类型不在允许列表中，不要输出该 fact。",
+            "- 属性只允许使用上述属性 ID，且必须属于对应实体类型。",
+            "- 存在关系类型时，不要把另一个实体作为属性值；应输出 fact。",
+            "- 不确定的属性值不要输出，不要使用“未知”等占位值。",
+            "- attribute 的 evidence.quote 只取能证明属性值的最短原文片段，"
+            "并且必须逐字等于 text[start:end]。",
         ]
     )

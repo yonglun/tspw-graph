@@ -34,14 +34,25 @@ class CandidateFact(BaseModel):
     confidence: float = Field(default=1.0, ge=0, le=1)
 
 
+class CandidateAttribute(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entity_local_id: str = Field(max_length=100)
+    property_id: str = Field(max_length=100)
+    value: str = Field(max_length=500)
+    evidence: CandidateEvidence
+    confidence: float = Field(default=1.0, ge=0, le=1)
+
+
 class ExtractionResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     entities: list[CandidateEntity] = Field(default_factory=list, max_length=100)
     facts: list[CandidateFact] = Field(default_factory=list, max_length=200)
+    attributes: list[CandidateAttribute] = Field(default_factory=list, max_length=200)
 
     def validate_for_chunk(self, chunk: str) -> None:
-        for fact in self.facts:
-            evidence = fact.evidence
+        evidence_items = [fact.evidence for fact in self.facts]
+        evidence_items.extend(attribute.evidence for attribute in self.attributes)
+        for evidence in evidence_items:
             if evidence.end > len(chunk) or evidence.start >= evidence.end:
                 raise ValueError("EVIDENCE_OFFSET_OUT_OF_RANGE")
             if chunk[evidence.start : evidence.end] != evidence.quote:
@@ -96,12 +107,31 @@ def strict_extraction_schema() -> dict[str, Any]:
         ],
         "additionalProperties": False,
     }
+    attribute = {
+        "type": "object",
+        "properties": {
+            "entity_local_id": {"type": "string"},
+            "property_id": {"type": "string"},
+            "value": {"type": "string"},
+            "evidence": evidence,
+            "confidence": {"type": "number"},
+        },
+        "required": [
+            "entity_local_id",
+            "property_id",
+            "value",
+            "evidence",
+            "confidence",
+        ],
+        "additionalProperties": False,
+    }
     return {
         "type": "object",
         "properties": {
             "entities": {"type": "array", "items": entity},
             "facts": {"type": "array", "items": fact},
+            "attributes": {"type": "array", "items": attribute},
         },
-        "required": ["entities", "facts"],
+        "required": ["entities", "facts", "attributes"],
         "additionalProperties": False,
     }

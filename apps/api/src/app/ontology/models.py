@@ -42,12 +42,30 @@ class FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class PropertyValueType(StrEnum):
+    TEXT = "TEXT"
+    NUMBER = "NUMBER"
+    BOOLEAN = "BOOLEAN"
+    ENUM = "ENUM"
+
+
+class PropertyDefinition(FrozenModel):
+    id: str
+    label: str
+    description: str
+    value_type: PropertyValueType = PropertyValueType.TEXT
+    multiple: bool = False
+    enum_values: tuple[str, ...] = ()
+
+
 class EntityTypeDefinition(FrozenModel):
     id: EntityType
     label: str
     description: str
     color: str
     parent: EntityType | None = None
+    property_definitions: tuple[PropertyDefinition, ...] = ()
+    effective_property_definitions: tuple[PropertyDefinition, ...] = ()
 
 
 class RelationTypeDefinition(FrozenModel):

@@ -40,6 +40,13 @@ class GraphImporter:
                 for item in document.evidence
             ],
         )
+        created_attributes = self.writer.upsert_batch(
+            "AttributeAssertion",
+            [
+                {"project_id": project_id, **item.model_dump(mode="json")}
+                for item in document.attributes
+            ],
+        )
         created_facts = self.writer.upsert_batch(
             "Fact",
             [
@@ -51,4 +58,5 @@ class GraphImporter:
             created_entities=created_entities,
             created_facts=created_facts,
             created_evidence=created_evidence,
+            created_attributes=created_attributes,
         )

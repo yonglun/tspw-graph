@@ -12,6 +12,12 @@ CONSTRAINTS = (
     "CREATE CONSTRAINT entity_id IF NOT EXISTS FOR (n:Entity) REQUIRE (n.project_id, n.id) IS UNIQUE",
     "CREATE CONSTRAINT fact_id IF NOT EXISTS FOR (n:Fact) REQUIRE (n.project_id, n.id) IS UNIQUE",
     "CREATE CONSTRAINT evidence_id IF NOT EXISTS FOR (n:Evidence) REQUIRE (n.project_id, n.id) IS UNIQUE",
+    "CREATE CONSTRAINT attribute_assertion_id IF NOT EXISTS FOR (n:AttributeAssertion) REQUIRE (n.project_id, n.id) IS UNIQUE",
+)
+
+INDEXES = (
+    "CREATE INDEX entity_project_name IF NOT EXISTS FOR (n:Entity) ON (n.project_id, n.name)",
+    "CREATE INDEX entity_project_type IF NOT EXISTS FOR (n:Entity) ON (n.project_id, n.type)",
 )
 
 
@@ -41,6 +47,38 @@ UPSERT_QUERIES: dict[str, str] = {
         MERGE (n:Evidence {project_id: row.project_id, id: row.id})
         SET n += row
         MERGE (n)-[:IN_CHAPTER]->(c)
+    """,
+    "AttributeAssertion": """
+        UNWIND $rows AS row
+        OPTIONAL MATCH (stable:Entity {
+            project_id: row.project_id,
+            id: row.entity_id
+        })
+        OPTIONAL MATCH (candidate:Entity {project_id: row.project_id})
+        WHERE stable IS NULL
+          AND (
+            candidate.name = row.entity_name
+            OR row.entity_name IN coalesce(candidate.aliases, [])
+          )
+        WITH row, stable, candidate,
+             CASE WHEN candidate.name = row.entity_name THEN 0 ELSE 1 END AS match_rank
+        ORDER BY match_rank, candidate.id
+        WITH row, stable, head(collect(candidate)) AS fallback
+        WITH row, coalesce(stable, fallback) AS entity
+        WHERE entity IS NOT NULL
+        MERGE (assertion:AttributeAssertion {
+            project_id: row.project_id,
+            id: row.id
+        })
+        SET assertion += row
+        MERGE (entity)-[:HAS_ATTRIBUTE]->(assertion)
+        WITH assertion, row
+        UNWIND row.evidence_ids AS evidence_id
+        MATCH (evidence:Evidence {
+            project_id: row.project_id,
+            id: evidence_id
+        })
+        MERGE (assertion)-[:EVIDENCED_BY]->(evidence)
     """,
     "Fact": """
         UNWIND $rows AS row
@@ -82,6 +120,8 @@ class Neo4jGraphWriter:
     def ensure_constraints(self) -> None:
         with self.driver.session() as session:
             for statement in CONSTRAINTS:
+                session.run(statement).consume()
+            for statement in INDEXES:
                 session.run(statement).consume()
 
     def delete_project(self, project_id: str) -> None:

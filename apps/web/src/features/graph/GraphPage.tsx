@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 
 import { apiFetch, type EntityDetail, type EntitySummary, type Neighborhood } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
@@ -14,23 +14,77 @@ export function GraphPage() {
   const [results, setResults] = useState<EntitySummary[]>([])
   const [graph, setGraph] = useState<Neighborhood>(EMPTY_GRAPH)
   const [detail, setDetail] = useState<EntityDetail>()
+  const [selected, setSelected] = useState<EntitySummary>()
+  const [graphDepth, setGraphDepth] = useState<1 | 2>(1)
+  const [graphLoading, setGraphLoading] = useState(false)
   const [error, setError] = useState('')
+  const graphRequest = useRef<AbortController | undefined>(undefined)
+  const detailRequest = useRef<AbortController | undefined>(undefined)
+
+  const abortEntityRequests = useCallback(() => {
+    graphRequest.current?.abort()
+    detailRequest.current?.abort()
+    graphRequest.current = undefined
+    detailRequest.current = undefined
+  }, [])
+
   useEffect(() => {
     if (!query.trim()) { setResults([]); setError(''); return }
+    const controller = new AbortController()
     const timer = window.setTimeout(() => {
-      apiFetch<EntitySummary[]>(`/api/graph/search?project_id=${projectId}&query=${encodeURIComponent(query)}`)
+      apiFetch<EntitySummary[]>(`/api/graph/search?project_id=${projectId}&query=${encodeURIComponent(query)}`, { signal: controller.signal })
         .then(nextResults => { setResults(nextResults); setError('') })
-        .catch((e: Error) => setError(e.message))
+        .catch((e: Error) => { if (e.name !== 'AbortError') setError(e.message) })
     }, 180)
-    return () => window.clearTimeout(timer)
+    return () => { window.clearTimeout(timer); controller.abort() }
   }, [query, projectId])
-  const selectEntity = useCallback((id: string) => {
-    setResults([]); setError('')
-    Promise.all([
-      apiFetch<EntityDetail>(`/api/entities/${encodeURIComponent(id)}?project_id=${projectId}`),
-      apiFetch<Neighborhood>(`/api/graph/neighborhood?project_id=${projectId}&entity_id=${encodeURIComponent(id)}&depth=2`),
-    ]).then(([nextDetail, nextGraph]) => { setDetail(nextDetail); setGraph(nextGraph) }).catch((e: Error) => setError(e.message))
-  }, [projectId])
+
+  useEffect(() => {
+    return () => abortEntityRequests()
+  }, [abortEntityRequests, projectId])
+
+  const selectEntity = useCallback((entity: EntitySummary) => {
+    abortEntityRequests()
+    setSelected(entity)
+    setResults([])
+    setError('')
+    setDetail(undefined)
+    setGraphDepth(1)
+    setGraph({ nodes: [entity], edges: [] })
+    setGraphLoading(true)
+    const nextGraphRequest = new AbortController()
+    const nextDetailRequest = new AbortController()
+    graphRequest.current = nextGraphRequest
+    detailRequest.current = nextDetailRequest
+
+    apiFetch<Neighborhood>(`/api/graph/neighborhood?project_id=${projectId}&entity_id=${encodeURIComponent(entity.id)}&depth=1&limit=50`, { signal: nextGraphRequest.signal })
+      .then(nextGraph => { setGraph(nextGraph); setGraphDepth(1) })
+      .catch((e: Error) => { if (e.name !== 'AbortError') setError(e.message) })
+      .finally(() => { if (!nextGraphRequest.signal.aborted) setGraphLoading(false) })
+
+    apiFetch<EntityDetail>(`/api/entities/${encodeURIComponent(entity.id)}?project_id=${projectId}`, { signal: nextDetailRequest.signal })
+      .then(nextDetail => setDetail(nextDetail))
+      .catch((e: Error) => { if (e.name !== 'AbortError') setError(e.message) })
+  }, [abortEntityRequests, projectId])
+
+  const selectEntityById = useCallback((id: string) => {
+    const entity = graph.nodes.find(node => node.id === id)
+    if (entity) selectEntity(entity)
+  }, [graph.nodes, selectEntity])
+
+  const expandTwoHop = useCallback(() => {
+    if (!selected) return
+    graphRequest.current?.abort()
+    const controller = new AbortController()
+    graphRequest.current = controller
+    setGraphLoading(true)
+    setError('')
+    apiFetch<Neighborhood>(`/api/graph/neighborhood?project_id=${projectId}&entity_id=${encodeURIComponent(selected.id)}&depth=2&limit=100`, { signal: controller.signal })
+      .then(nextGraph => { setGraph(nextGraph); setGraphDepth(2) })
+      .catch((e: Error) => { if (e.name !== 'AbortError') setError(e.message) })
+      .finally(() => { if (!controller.signal.aborted) setGraphLoading(false) })
+  }, [projectId, selected])
+
   function reviewFact(factId: string) {
     apiFetch(`/api/projects/${projectId}/review/items`, {
       method: 'POST',
@@ -44,5 +98,5 @@ export function GraphPage() {
       }),
     }).catch((e: Error) => setError(e.message))
   }
-  return <section className="graph-page"><header className="graph-toolbar"><div><p className="eyebrow">GRAPH EXPLORER · 03</p><h1>沿关系，游江湖</h1></div><div className="search-wrap"><label htmlFor="graph-search">搜索人物、门派或武学</label><input id="graph-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="例如：令狐冲" />{results.length > 0 && <div className="search-results">{results.map(item => <button key={item.id} onClick={() => selectEntity(item.id)}><b>{item.name}</b><span>{item.type} · {item.description}</span></button>)}</div>}</div></header>{error && <div role="alert" className="error-state">{error}</div>}<div className="graph-workspace"><GraphCanvas graph={graph} onSelect={selectEntity} /><EntityPanel detail={detail} onClose={() => setDetail(undefined)} onReviewFact={reviewFact} /></div><footer className="graph-legend">{visibleEntityTypeStyles(graph.nodes).map(type => <span key={type.label}><i style={{ '--legend-color': type.color } as CSSProperties} />{type.label}</span>)}<b>{graph.nodes.length} 节点 · {graph.edges.length} 关系</b></footer></section>
+  return <section className="graph-page"><header className="graph-toolbar"><div><p className="eyebrow">GRAPH EXPLORER · 03</p><h1>沿关系，游江湖</h1></div><div className="search-wrap"><label htmlFor="graph-search">搜索人物、门派或武学</label><input id="graph-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="例如：令狐冲" />{results.length > 0 && <div className="search-results">{results.map(item => <button key={item.id} onClick={() => selectEntity(item)}><b>{item.name}</b><span>{item.type} · {item.description}</span></button>)}</div>}</div></header>{error && <div role="alert" className="error-state">{error}</div>}<div className="graph-workspace"><GraphCanvas graph={graph} centerId={selected?.id} onSelect={selectEntityById} /><EntityPanel detail={detail} onClose={() => setDetail(undefined)} onReviewFact={reviewFact} /></div><footer className="graph-legend">{visibleEntityTypeStyles(graph.nodes).map(type => <span key={type.label}><i style={{ '--legend-color': type.color } as CSSProperties} />{type.label}</span>)}{selected && graphDepth === 1 && !graphLoading && <button type="button" className="text-button" onClick={expandTwoHop}>展开二度关系</button>}<b>{graph.nodes.length} 节点 · {graph.edges.length} 关系</b></footer></section>
 }

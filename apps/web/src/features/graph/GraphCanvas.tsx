@@ -4,7 +4,15 @@ import { useEffect, useRef } from 'react'
 import type { Neighborhood } from '../../api/client'
 import { getEntityTypeStyle } from './entityTypeStyles'
 
-export function GraphCanvas({ graph, onSelect }: { graph: Neighborhood; onSelect: (id: string) => void }) {
+export function GraphCanvas({
+  graph,
+  centerId,
+  onSelect,
+}: {
+  graph: Neighborhood
+  centerId?: string
+  onSelect: (id: string) => void
+}) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!ref.current || graph.nodes.length === 0) return
@@ -20,10 +28,17 @@ export function GraphCanvas({ graph, onSelect }: { graph: Neighborhood; onSelect
         { selector: 'node[type = "Person"]', style: { width: 38, height: 38 } },
         { selector: 'edge', style: { width: 1.5, 'line-color': '#b9b1a4', 'target-arrow-color': '#b9b1a4', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', label: 'data(label)', 'font-size': 8, color: '#736b60' } },
       ],
-      layout: { name: 'cose', animate: false, padding: 32 },
+      layout: {
+        name: 'concentric',
+        animate: false,
+        padding: 32,
+        minNodeSpacing: 48,
+        concentric: node => (node.id() === centerId ? 2 : 1),
+        levelWidth: () => 1,
+      },
     })
     cy.on('tap', 'node', event => onSelect(event.target.id()))
     return () => cy.destroy()
-  }, [graph, onSelect])
-  return <div ref={ref} className="graph-canvas" aria-label="知识图谱画布">{graph.nodes.length === 0 && <div className="canvas-empty"><b>从一个人物开始</b><p>搜索实体后，图谱只展开相关邻居，避免全图失控。</p></div>}</div>
+  }, [centerId, graph, onSelect])
+  return <div ref={ref} className="graph-canvas" aria-label="知识图谱画布">{graph.nodes.length === 0 && <div className="canvas-empty"><b>从一个人物开始</b><p>搜索实体后，图谱只展开相关邻居，避免全图失控。</p></div>}<ul className="graph-node-list" aria-label="图谱节点">{graph.nodes.map(node => <li key={node.id}>{node.name}</li>)}</ul></div>
 }

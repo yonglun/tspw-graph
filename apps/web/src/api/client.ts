@@ -27,7 +27,29 @@ export type Fact = {
   evidence: Evidence[]
 }
 
-export type EntityDetail = EntitySummary & { facts: Fact[] }
+export type AttributeDetail = {
+  id: string
+  property_id: string
+  label: string
+  value_type: string
+  value: string
+  confidence: number
+  evidence: Evidence[]
+}
+
+export type RelationSummary = {
+  fact_id: string
+  type: string
+  label: string
+  direction: 'OUTGOING' | 'INCOMING'
+  other: { id: string; type: string; name: string }
+}
+
+export type EntityDetail = EntitySummary & {
+  attributes?: AttributeDetail[]
+  relations?: RelationSummary[]
+  facts: Fact[]
+}
 
 export type GraphEdge = {
   id: string

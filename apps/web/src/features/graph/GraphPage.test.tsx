@@ -8,6 +8,18 @@ const entity = {
   id: 'xiaoao:person:linghuchong', project_id: 'xiaoao', type: 'Person',
   name: '令狐沖', aliases: ['令狐冲'], description: '华山派大弟子。',
 }
+const yue = { id: 'yue', project_id: 'xiaoao', type: 'Person', name: '岳不群', aliases: [], description: '' }
+
+function deferredResponse<T>() {
+  let resolve!: (value: Response) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<Response>((res, rej) => { resolve = res; reject = rej })
+  return {
+    promise,
+    resolve: (value: T) => resolve(new Response(JSON.stringify(value))),
+    reject,
+  }
+}
 
 describe('GraphPage', () => {
   afterEach(() => {
@@ -34,6 +46,98 @@ describe('GraphPage', () => {
 
     expect(await screen.findByText('第五章 · 治傷')).toBeVisible()
     expect(screen.getByText('嫡派傳人')).toBeVisible()
+  })
+
+  it('renders the selected center before graph and detail requests finish', async () => {
+    const neighborhood = deferredResponse()
+    const detail = deferredResponse()
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/graph/search')) return Promise.resolve(new Response(JSON.stringify([entity])))
+      if (url.includes('/api/entities/')) return detail.promise
+      if (url.includes('/api/graph/neighborhood')) return neighborhood.promise
+      return Promise.resolve(new Response(JSON.stringify({})))
+    }))
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+
+    expect(screen.getByLabelText('知识图谱画布')).toHaveTextContent('令狐沖')
+    expect(screen.queryByText('岳不群')).not.toBeInTheDocument()
+
+    neighborhood.resolve({ nodes: [entity, yue], edges: [{ id: 'e1', source_id: entity.id, target_id: yue.id, type: 'MASTER_OF', confidence: 1 }] })
+    expect(await screen.findByText('岳不群')).toBeVisible()
+  })
+
+  it('requests one hop first and expands to two hops only on demand', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/graph/search')) return new Response(JSON.stringify([entity]))
+      if (url.includes('/api/entities/')) return new Response(JSON.stringify({ ...entity, facts: [] }))
+      if (url.includes('depth=1')) return new Response(JSON.stringify({ nodes: [entity, yue], edges: [] }))
+      if (url.includes('depth=2')) return new Response(JSON.stringify({ nodes: [entity, yue, { id: 'feng', project_id: 'xiaoao', type: 'Person', name: '风清扬', aliases: [], description: '' }], edges: [] }))
+      return new Response(JSON.stringify({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+
+    expect(await screen.findByText('岳不群')).toBeVisible()
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('depth=2'), expect.anything())
+
+    await user.click(await screen.findByRole('button', { name: '展开二度关系' }))
+    expect(await screen.findByText('风清扬')).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('depth=2'), expect.anything())
+  })
+
+  it('keeps the one-hop graph visible when two-hop expansion fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/graph/search')) return new Response(JSON.stringify([entity]))
+      if (url.includes('/api/entities/')) return new Response(JSON.stringify({ ...entity, facts: [] }))
+      if (url.includes('depth=1')) return new Response(JSON.stringify({ nodes: [entity, yue], edges: [] }))
+      if (url.includes('depth=2')) return new Response('{}', { status: 503 })
+      return new Response(JSON.stringify({}))
+    }))
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+    expect(await screen.findByText('岳不群')).toBeVisible()
+
+    await user.click(await screen.findByRole('button', { name: '展开二度关系' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('请求失败（503）')
+    expect(screen.getByText('岳不群')).toBeVisible()
+  })
+
+  it('aborts stale entity requests when selecting a new result', async () => {
+    const signals: AbortSignal[] = []
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/api/graph/search')) return Promise.resolve(new Response(JSON.stringify([entity, yue])))
+      if (url.includes('/api/entities/') || url.includes('/api/graph/neighborhood')) {
+        if (init?.signal) signals.push(init.signal)
+        return new Promise<Response>(() => undefined)
+      }
+      return Promise.resolve(new Response(JSON.stringify({})))
+    }))
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+    await user.clear(screen.getByRole('searchbox'))
+    await user.type(screen.getByRole('searchbox'), '岳')
+    await user.click(await screen.findByRole('button', { name: /岳不群/ }))
+
+    expect(signals.slice(0, 2).every(signal => signal.aborted)).toBe(true)
   })
 
   it('clears a stale request error after a successful retry', async () => {

@@ -2,6 +2,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Engine, func, inspect, or_, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.jobs.models import (
@@ -29,13 +30,26 @@ class JobRepository:
             return
         columns = {item["name"] for item in inspect(self.engine).get_columns("jobs")}
         if "kind" not in columns:
-            with self.engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "ALTER TABLE jobs ADD COLUMN kind VARCHAR(30) "
-                        "NOT NULL DEFAULT 'FULL_BUILD'"
+            try:
+                with self.engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE jobs ADD COLUMN kind VARCHAR(30) "
+                            "NOT NULL DEFAULT 'FULL_BUILD'"
+                        )
                     )
+            except OperationalError as error:
+                duplicate_kind = (
+                    str(error.orig).strip().lower() == "duplicate column name: kind"
                 )
+                if not duplicate_kind:
+                    raise
+                migrated = "kind" in {
+                    item["name"]
+                    for item in inspect(self.engine).get_columns("jobs")
+                }
+                if not migrated:
+                    raise
 
     def create(
         self,

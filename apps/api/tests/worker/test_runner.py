@@ -98,6 +98,8 @@ def test_online_handlers_complete_fixed_provider_job(tmp_path):
     class Writer:
         def ensure_constraints(self): pass
         def upsert_batch(self, label, rows): return len(rows)
+        def resolve_attribute_entities(self, project_id, hints):
+            return {hint["id"]: hint["id"] for hint in hints}
 
     handlers = OnlineBuildHandlers(
         projects=projects, jobs=jobs, uploads=uploads,
@@ -135,6 +137,9 @@ def test_attribute_backfill_only_writes_attributes_and_their_evidence(tmp_path):
             self.labels.append(label)
             self.rows[label] = rows
             return len(rows)
+
+        def resolve_attribute_entities(self, project_id, hints):
+            return {hint["id"]: hint["id"] for hint in hints}
 
     writer = RecordingWriter()
     handlers = OnlineBuildHandlers(

@@ -47,6 +47,12 @@ class UploadStore:
             raise InvalidUpload("INVALID_PROJECT_PATH")
         return directory
 
+    def resolve_stored_path(self, relative_path: str) -> Path:
+        path = (self.root / relative_path).resolve()
+        if self.root not in path.parents:
+            raise InvalidUpload("INVALID_PROJECT_PATH")
+        return path
+
     def save(self, project_id: str, filename: str, stream: BinaryIO) -> StoredUpload:
         if Path(filename).suffix.lower() != ".txt":
             raise InvalidUpload("TXT_ONLY")

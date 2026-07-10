@@ -191,17 +191,7 @@ class ExtractionPipeline:
         )
         accepted_entities = 0 if attributes_only else len(entities)
         accepted_facts = 0 if attributes_only else len(facts)
-        accepted_evidence = (
-            len(
-                {
-                    evidence_id
-                    for attribute in attributes.values()
-                    for evidence_id in attribute.evidence_ids
-                }
-            )
-            if attributes_only
-            else len(evidence)
-        )
+        accepted_evidence = summary.retained_evidence
         return PipelineResult(
             quality=QualityReport(
                 total_chunks=len(split.chunks),
@@ -210,14 +200,8 @@ class ExtractionPipeline:
                 accepted_entities=accepted_entities,
                 accepted_facts=accepted_facts,
                 accepted_evidence=accepted_evidence,
-                accepted_attributes=len(attributes),
-                accepted_attribute_evidence=len(
-                    {
-                        evidence_id
-                        for attribute in attributes.values()
-                        for evidence_id in attribute.evidence_ids
-                    }
-                ),
+                accepted_attributes=summary.retained_attributes,
+                accepted_attribute_evidence=summary.retained_attribute_evidence,
                 rejected_by_code=dict(rejections),
                 model_calls=len(split.chunks),
                 retry_count=retry_count,

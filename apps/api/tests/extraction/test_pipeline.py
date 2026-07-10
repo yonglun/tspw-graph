@@ -14,6 +14,8 @@ class MemoryWriter:
         before = len(self.keys[label])
         self.keys[label].update(row["id"] for row in rows)
         return len(self.keys[label]) - before
+    def resolve_attribute_entities(self, project_id, hints):
+        return {hint["id"]: hint["id"] for hint in hints if hint["id"] in self.keys["Entity"]}
 
 
 class CapturingWriter(MemoryWriter):
@@ -202,6 +204,9 @@ def test_attribute_only_pipeline_imports_only_attribute_evidence():
             self.rows[label] = rows
             return len(rows)
 
+        def resolve_attribute_entities(self, project_id, hints):
+            return {hint["id"]: hint["id"] for hint in hints}
+
     writer = RecordingWriter()
     output = ExtractionPipeline(GraphImporter(writer)).process(
         "p-1", "测试", source, FixedProvider(result), attributes_only=True
@@ -217,3 +222,35 @@ def test_attribute_only_pipeline_imports_only_attribute_evidence():
     assert output.import_summary.created_facts == 0
     assert output.import_summary.created_evidence == 1
     assert output.import_summary.created_attributes == 1
+
+
+def test_attribute_only_quality_counts_only_resolved_assertions_and_evidence():
+    source = "第一章 开端\n甲是掌门"
+    value_start = source.find("掌门")
+    result = ExtractionResult.model_validate({
+        "entities": [{"local_id": "a", "name": "甲", "type": "Person"}],
+        "attributes": [{
+            "entity_local_id": "a",
+            "property_id": "identity",
+            "value": "掌门",
+            "evidence": {
+                "start": value_start,
+                "end": value_start + len("掌门"),
+                "quote": "掌门",
+            },
+        }],
+    })
+
+    class RejectingWriter(MemoryWriter):
+        def resolve_attribute_entities(self, project_id, hints):
+            return {}
+
+    output = ExtractionPipeline(GraphImporter(RejectingWriter())).process(
+        "p-1", "测试", source, FixedProvider(result), attributes_only=True
+    )
+
+    assert output.quality.accepted_attributes == 0
+    assert output.quality.accepted_attribute_evidence == 0
+    assert output.quality.accepted_evidence == 0
+    assert output.import_summary.created_attributes == 0
+    assert output.import_summary.created_evidence == 0

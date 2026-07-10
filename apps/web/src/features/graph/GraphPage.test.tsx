@@ -1,7 +1,10 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 
+import { ProjectProvider } from '../../app/ProjectContext'
+import { ProjectSwitcher } from '../projects/ProjectSwitcher'
 import { GraphPage } from './GraphPage'
 
 const entity = {
@@ -296,5 +299,44 @@ describe('GraphPage', () => {
     expect(screen.getByText('门派')).toBeVisible()
     expect(screen.getByText('剑法')).toBeVisible()
     expect(screen.queryByText('其他实体')).not.toBeInTheDocument()
+  })
+
+  it('clears graph and entity state when the router project changes', async () => {
+    const projects = [
+      { id: 'p-1', title: '项目一', is_builtin: false, source_encoding: 'utf-8', source_size: 1, created_at: '', updated_at: '' },
+      { id: 'p-2', title: '项目二', is_builtin: false, source_encoding: 'utf-8', source_size: 1, created_at: '', updated_at: '' },
+    ]
+    const oldEntity = { ...entity, id: 'old-entity', project_id: 'p-1' }
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url === '/api/projects') return new Response(JSON.stringify(projects))
+      if (url.includes('/api/graph/search') && url.includes('project_id=p-1')) return new Response(JSON.stringify([oldEntity]))
+      if (url.includes('/api/graph/search') && url.includes('project_id=p-2')) return new Response(JSON.stringify([]))
+      if (url.includes('/api/entities/old-entity')) return new Response(JSON.stringify({ ...oldEntity, attributes: [], relations: [], facts: [] }))
+      if (url.includes('/api/graph/neighborhood') && url.includes('project_id=p-1')) return new Response(JSON.stringify({ nodes: [oldEntity, yue], edges: [] }))
+      return new Response(JSON.stringify({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/graph?project=p-1']}>
+        <ProjectProvider><ProjectSwitcher /><GraphPage /></ProjectProvider>
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+    expect(await screen.findByText('岳不群')).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '令狐沖' })).toBeVisible()
+
+    await user.selectOptions(screen.getByLabelText('当前项目'), 'p-2')
+
+    expect(screen.queryByText('岳不群')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '令狐沖' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '展开二度关系' })).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringMatching(/project_id=p-2.*entity_id=old-entity.*depth=2/),
+      expect.anything(),
+    )
   })
 })

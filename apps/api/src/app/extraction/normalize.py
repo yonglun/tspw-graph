@@ -21,6 +21,16 @@ from app.ontology.properties import property_definition_for
 
 
 MAX_EVIDENCE_QUOTE_LENGTH = 500
+PURE_RELATIONSHIP_ROLE_VALUES = {
+    "师父",
+    "师傅",
+    "徒弟",
+    "弟子",
+    "丈夫",
+    "妻子",
+    "配偶",
+    "成员",
+}
 
 
 @dataclass(frozen=True)
@@ -207,6 +217,16 @@ def normalize_chunk_result(
         if rejection_code is not None:
             normalized.rejections.append(Rejection(rejection_code))
             continue
+        assert value is not None
+        other_entity_names = {
+            name
+            for local_id, candidate_entity in entities_by_local_id.items()
+            if local_id != candidate.entity_local_id.strip()
+            for name in (candidate_entity.name, *candidate_entity.aliases)
+        }
+        if value in PURE_RELATIONSHIP_ROLE_VALUES or value in other_entity_names:
+            normalized.rejections.append(Rejection("RELATION_SEMANTIC_ATTRIBUTE"))
+            continue
         evidence_id = evidence_record(
             candidate.evidence,
             "ATTRIBUTE_EVIDENCE_MISMATCH",
@@ -214,7 +234,6 @@ def normalize_chunk_result(
         )
         if evidence_id is None:
             continue
-        assert value is not None
         attribute_id = (
             f"{project_id}:attribute:"
             f"{_stable_id(project_id, entity.id, property_id, value)}"

@@ -127,7 +127,15 @@ def create_attribute_job(
         raise HTTPException(
             status_code=404, detail={"code": "PROJECT_NOT_FOUND"}
         ) from error
-    if not project.source_path:
+    try:
+        source_file = (
+            service.uploads.resolve_stored_path(project.source_path)
+            if project.source_path
+            else None
+        )
+    except InvalidUpload:
+        source_file = None
+    if source_file is None or not source_file.is_file():
         raise HTTPException(409, detail={"code": "PROJECT_SOURCE_MISSING"})
     if request.model_profile_id not in {
         profile.id for profile in get_settings().model_profiles

@@ -346,3 +346,62 @@ def test_fact_and_attribute_at_same_position_share_evidence_record():
 
     assert len(normalized.evidence) == 1
     assert normalized.facts[0].evidence_ids == normalized.attributes[0].evidence_ids
+
+
+def test_attribute_rejects_exact_other_entity_name_or_alias_as_relationship_semantic():
+    chunk = TextChunk("c1", 1, 0, 6, "华山派掌门")
+    for value in ("华山派", "华山"):
+        result = ExtractionResult.model_validate({
+            "entities": [
+                {"local_id": "p", "name": "岳不群", "type": "Person"},
+                {"local_id": "s", "name": "华山派", "type": "Sect", "aliases": ["华山"]},
+            ],
+            "attributes": [{
+                "entity_local_id": "p",
+                "property_id": "identity",
+                "value": value,
+                "evidence": {"start": 0, "end": 3, "quote": "华山派"},
+            }],
+        })
+
+        normalized = normalize_chunk_result("p-1", chunk, result)
+
+        assert normalized.attributes == []
+        assert normalized.rejections[-1].code == "RELATION_SEMANTIC_ATTRIBUTE"
+
+
+def test_attribute_rejects_exact_pure_relationship_role():
+    chunk = TextChunk("c1", 1, 0, 2, "师父")
+    result = ExtractionResult.model_validate({
+        "entities": [{"local_id": "p", "name": "令狐冲", "type": "Person"}],
+        "attributes": [{
+            "entity_local_id": "p",
+            "property_id": "identity",
+            "value": "师父",
+            "evidence": {"start": 0, "end": 2, "quote": "师父"},
+        }],
+    })
+
+    normalized = normalize_chunk_result("p-1", chunk, result)
+
+    assert normalized.attributes == []
+    assert normalized.rejections[-1].code == "RELATION_SEMANTIC_ATTRIBUTE"
+
+
+def test_attribute_keeps_legitimate_identity_containing_relationship_role():
+    value = "华山派大弟子"
+    chunk = TextChunk("c1", 1, 0, len(value), value)
+    result = ExtractionResult.model_validate({
+        "entities": [{"local_id": "p", "name": "令狐冲", "type": "Person"}],
+        "attributes": [{
+            "entity_local_id": "p",
+            "property_id": "identity",
+            "value": value,
+            "evidence": {"start": 0, "end": len(value), "quote": value},
+        }],
+    })
+
+    normalized = normalize_chunk_result("p-1", chunk, result)
+
+    assert normalized.rejections == []
+    assert normalized.attributes[0].value == value

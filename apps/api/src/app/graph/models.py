@@ -98,6 +98,9 @@ class ImportSummary(BaseModel):
     created_facts: int = 0
     created_evidence: int = 0
     created_attributes: int = 0
+    retained_attributes: int = 0
+    retained_attribute_evidence: int = 0
+    retained_evidence: int = 0
 
 
 class EntitySummary(BaseModel):

@@ -277,6 +277,8 @@ def test_one_hop_query_returns_center_without_edges_and_matches_related_directly
     assert result == {"nodes": [center], "edges": []}
     assert "[edge:RELATED]" in session.statement
     assert "RELATED*" not in session.statement
+    assert "CALL {" in session.statement
+    assert session.statement.index("LIMIT $limit") < session.statement.index("collect(edge)")
 
 
 def test_depth_two_query_stays_bounded() -> None:
@@ -287,6 +289,21 @@ def test_depth_two_query_stays_bounded() -> None:
 
     assert result is None
     assert "RELATED*1..2" in session.statement
+    assert "CALL {" in session.statement
+    assert session.statement.index("LIMIT $limit") < session.statement.index("collect(path)")
+
+
+def test_depth_two_returns_an_isolated_valid_center() -> None:
+    center = FakeNode(id="center", project_id="p-1", type="Person", name="中心")
+    session = FakeSession({"nodes": [center], "edges": []})
+    repository = Neo4jGraphRepository(FakeDriver(session))
+
+    result = repository.neighborhood("p-1", "center", 2, 50, None, None)
+
+    assert result == {"nodes": [dict(center)], "edges": []}
+    center_match = session.statement.index("MATCH (center:Entity")
+    subquery = session.statement.index("CALL {")
+    assert center_match < subquery
 
 
 def test_neighborhood_caps_nodes_after_deduplication_and_drops_trimmed_edges() -> None:

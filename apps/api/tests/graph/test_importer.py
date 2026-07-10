@@ -7,15 +7,18 @@ from app.graph.neo4j import CONSTRAINTS, INDEXES, UPSERT_QUERIES
 
 
 class FakeGraph:
-    def __init__(self) -> None:
+    def __init__(self, resolutions: dict[str, str] | None = None) -> None:
         self.records: dict[str, set[str]] = defaultdict(set)
         self.upsert_order: list[str] = []
+        self.rows: dict[str, list[dict[str, Any]]] = {}
+        self.resolutions = resolutions
 
     def ensure_constraints(self) -> None:
         return None
 
     def upsert_batch(self, label: str, rows: list[dict[str, Any]]) -> int:
         self.upsert_order.append(label)
+        self.rows[label] = rows
         created = 0
         for row in rows:
             key = str(row["id"])
@@ -23,6 +26,12 @@ class FakeGraph:
                 self.records[label].add(key)
                 created += 1
         return created
+
+    def resolve_attribute_entities(self, project_id, hints):
+        if self.resolutions is not None:
+            return self.resolutions
+        entity_ids = self.records["Entity"]
+        return {hint["id"]: hint["id"] for hint in hints if hint["id"] in entity_ids}
 
     def count(self, label: str) -> int:
         return len(self.records[label])
@@ -110,23 +119,109 @@ def test_attribute_schema_statements_are_idempotent() -> None:
 def test_attribute_upsert_matches_existing_entity_without_creating_one() -> None:
     query = " ".join(UPSERT_QUERIES["AttributeAssertion"].split())
 
-    assert "OPTIONAL MATCH (stable:Entity" in query
+    assert "MATCH (entity:Entity" in query
     assert "project_id: row.project_id" in query
-    assert "id: row.entity_id" in query
-    assert "OPTIONAL MATCH (candidate:Entity {project_id: row.project_id})" in query
-    assert "stable.type = row.entity_type" in query
-    assert "coalesce(stable.review_status, 'ACCEPTED') <> 'MERGED'" in query
-    assert "candidate.type = row.entity_type" in query
-    assert "coalesce(candidate.review_status, 'ACCEPTED') <> 'MERGED'" in query
-    assert (
-        "candidate.name = row.entity_name OR "
-        "row.entity_name IN coalesce(candidate.aliases, [])"
-    ) in query
-    assert "coalesce(stable, fallback) AS entity" in query
-    assert "WHERE entity IS NOT NULL" in query
+    assert "entity.id = row.entity_id" in query
+    assert "entity.type = row.entity_type" in query
+    assert "coalesce(entity.review_status, 'ACCEPTED') <> 'MERGED'" in query
     assert "MERGE (assertion:AttributeAssertion" in query
     assert "id: row.id" in query
     assert "MERGE (entity)-[:HAS_ATTRIBUTE]->(assertion)" in query
     assert "MERGE (assertion)-[:EVIDENCED_BY]->(evidence)" in query
     assert "MERGE (entity:Entity" not in query
     assert "CREATE (entity" not in query
+
+
+def test_attribute_backfill_drops_unresolved_assertions_and_orphan_evidence() -> None:
+    document = sample_document().model_copy(
+        update={"facts": [], "entities": sample_document().entities[:1]}
+    )
+    writer = FakeGraph(resolutions={})
+
+    summary = GraphImporter(writer).import_attributes(document)
+
+    assert writer.rows["AttributeAssertion"] == []
+    assert writer.rows["Evidence"] == []
+    assert summary.created_attributes == 0
+    assert summary.created_evidence == 0
+    assert summary.retained_attributes == 0
+    assert summary.retained_attribute_evidence == 0
+
+
+def test_attribute_backfill_drops_an_ambiguous_alias_without_fallback_choice() -> None:
+    document = sample_document().model_copy(
+        update={"facts": [], "entities": sample_document().entities[:1]}
+    )
+    writer = FakeGraph(resolutions={})
+
+    GraphImporter(writer).import_attributes(document)
+
+    assert writer.rows["AttributeAssertion"] == []
+    assert writer.rows["Evidence"] == []
+
+
+def test_attribute_backfill_rekeys_alias_assertion_to_canonical_entity() -> None:
+    document = sample_document().model_copy(
+        update={"facts": [], "entities": sample_document().entities[:1]}
+    )
+    canonical_id = "xiaoao:person:canonical-linghu"
+    writer = FakeGraph(
+        resolutions={"xiaoao:person:linghuchong": canonical_id}
+    )
+
+    GraphImporter(writer).import_attributes(document)
+
+    row = writer.rows["AttributeAssertion"][0]
+    assert row["entity_id"] == canonical_id
+    assert row["id"] == "xiaoao:attribute:f2b76825428ac911"
+    assert writer.rows["Evidence"][0]["id"] in row["evidence_ids"]
+
+
+def test_canonical_and_alias_extractions_converge_to_one_assertion() -> None:
+    base = sample_document()
+    alias_attribute = base.attributes[0].model_copy(
+        update={
+            "id": "transient-alias-id",
+            "entity_id": "xiaoao:person:alias-linghu",
+            "entity_name": "令狐沖",
+        }
+    )
+    document = base.model_copy(
+        update={
+            "facts": [],
+            "entities": [
+                base.entities[0],
+                base.entities[0].model_copy(
+                    update={"id": "xiaoao:person:alias-linghu", "name": "令狐沖"}
+                ),
+            ],
+            "attributes": [base.attributes[0], alias_attribute],
+        }
+    )
+    canonical_id = "xiaoao:person:canonical-linghu"
+    writer = FakeGraph(
+        resolutions={
+            "xiaoao:person:linghuchong": canonical_id,
+            "xiaoao:person:alias-linghu": canonical_id,
+        }
+    )
+
+    summary = GraphImporter(writer).import_attributes(document)
+
+    assert len(writer.rows["AttributeAssertion"]) == 1
+    assert summary.created_attributes == 1
+    assert summary.retained_attributes == 1
+
+
+def test_entity_resolution_query_requires_unique_same_type_non_merged_fallback() -> None:
+    from app.graph.neo4j import RESOLVE_ATTRIBUTE_ENTITIES_QUERY
+
+    query = " ".join(RESOLVE_ATTRIBUTE_ENTITIES_QUERY.split())
+    assert "stable.type = hint.type" in query
+    assert "coalesce(stable.review_status, 'ACCEPTED') <> 'MERGED'" in query
+    assert "candidate.type = hint.type" in query
+    assert "coalesce(candidate.review_status, 'ACCEPTED') <> 'MERGED'" in query
+    assert "candidate.name = hint.name OR hint.name IN coalesce(candidate.aliases, [])" in query
+    assert "size(candidates) = 1" in query
+    assert "stable IS NOT NULL" in query
+    assert "WHERE stable IS NULL" in query

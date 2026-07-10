@@ -104,31 +104,41 @@ class Neo4jGraphRepository:
             statement = """
                 MATCH (center:Entity {project_id: $project_id, id: $entity_id})
                 WHERE coalesce(center.review_status, 'ACCEPTED') <> 'MERGED'
-                OPTIONAL MATCH (center)-[edge:RELATED]-(other:Entity {project_id: $project_id})
-                WHERE coalesce(edge.review_status, 'ACCEPTED') <> 'REJECTED'
-                  AND ($from_chapter IS NULL OR edge.to_chapter IS NULL OR edge.to_chapter >= $from_chapter)
-                  AND ($to_chapter IS NULL OR edge.from_chapter IS NULL OR edge.from_chapter <= $to_chapter)
-                  AND coalesce(other.review_status, 'ACCEPTED') <> 'MERGED'
-                WITH center, edge, other
-                ORDER BY edge.id
-                WITH center, collect(edge)[..$limit] AS edges,
-                    collect(other)[..$limit] AS others
+                CALL {
+                    WITH center
+                    OPTIONAL MATCH (center)-[edge:RELATED]-(other:Entity {project_id: $project_id})
+                    WHERE coalesce(edge.review_status, 'ACCEPTED') <> 'REJECTED'
+                      AND ($from_chapter IS NULL OR edge.to_chapter IS NULL OR edge.to_chapter >= $from_chapter)
+                      AND ($to_chapter IS NULL OR edge.from_chapter IS NULL OR edge.from_chapter <= $to_chapter)
+                      AND coalesce(other.review_status, 'ACCEPTED') <> 'MERGED'
+                    WITH edge, other
+                    ORDER BY edge.id, other.id
+                    LIMIT $limit
+                    RETURN collect(edge) AS edges, collect(other) AS others
+                }
                 RETURN [center] + others AS nodes, edges
             """
         elif depth == 2:
             statement = """
-            MATCH p=(center:Entity {project_id: $project_id, id: $entity_id})
-                -[rels:RELATED*1..2]-(other:Entity {project_id: $project_id})
-            WHERE all(r IN rels WHERE
-                coalesce(r.review_status, 'ACCEPTED') <> 'REJECTED'
-                AND ($from_chapter IS NULL OR r.to_chapter IS NULL OR r.to_chapter >= $from_chapter)
-                AND ($to_chapter IS NULL OR r.from_chapter IS NULL OR r.from_chapter <= $to_chapter))
-              AND coalesce(center.review_status, 'ACCEPTED') <> 'MERGED'
-              AND coalesce(other.review_status, 'ACCEPTED') <> 'MERGED'
-            WITH collect(p)[..$limit] AS paths
-            RETURN
-                reduce(ns = [], p IN paths | ns + nodes(p)) AS nodes,
-                reduce(rs = [], p IN paths | rs + relationships(p)) AS edges
+                MATCH (center:Entity {project_id: $project_id, id: $entity_id})
+                WHERE coalesce(center.review_status, 'ACCEPTED') <> 'MERGED'
+                CALL {
+                    WITH center
+                    OPTIONAL MATCH path=(center)-[rels:RELATED*1..2]-(other:Entity {project_id: $project_id})
+                    WHERE all(r IN rels WHERE
+                        coalesce(r.review_status, 'ACCEPTED') <> 'REJECTED'
+                        AND ($from_chapter IS NULL OR r.to_chapter IS NULL OR r.to_chapter >= $from_chapter)
+                        AND ($to_chapter IS NULL OR r.from_chapter IS NULL OR r.from_chapter <= $to_chapter))
+                      AND coalesce(other.review_status, 'ACCEPTED') <> 'MERGED'
+                    WITH path, rels, other
+                    ORDER BY length(path), other.id,
+                        reduce(key = '', relation IN rels | key + '|' + relation.id)
+                    LIMIT $limit
+                    RETURN collect(path) AS paths
+                }
+                RETURN
+                    [center] + reduce(ns = [], path IN paths | ns + nodes(path)) AS nodes,
+                    reduce(rs = [], path IN paths | rs + relationships(path)) AS edges
             """
         else:
             raise ValueError("depth must be 1 or 2")

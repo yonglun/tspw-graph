@@ -21,6 +21,34 @@ INDEXES = (
 )
 
 
+RESOLVE_ATTRIBUTE_ENTITIES_QUERY = """
+    UNWIND $hints AS hint
+    OPTIONAL MATCH (stable:Entity {
+        project_id: $project_id,
+        id: hint.id
+    })
+    WHERE stable.type = hint.type
+      AND coalesce(stable.review_status, 'ACCEPTED') <> 'MERGED'
+    WITH hint, stable
+    CALL {
+        WITH hint, stable
+        OPTIONAL MATCH (candidate:Entity {project_id: $project_id})
+        WHERE stable IS NULL
+          AND candidate.type = hint.type
+          AND coalesce(candidate.review_status, 'ACCEPTED') <> 'MERGED'
+          AND (
+            candidate.name = hint.name
+            OR hint.name IN coalesce(candidate.aliases, [])
+          )
+        RETURN collect(candidate) AS candidates
+    }
+    WITH hint, stable, candidates
+    WHERE stable IS NOT NULL OR size(candidates) = 1
+    RETURN hint.id AS extracted_id,
+           coalesce(stable.id, candidates[0].id) AS canonical_id
+"""
+
+
 UPSERT_QUERIES: dict[str, str] = {
     "Project": """
         UNWIND $rows AS row
@@ -50,26 +78,10 @@ UPSERT_QUERIES: dict[str, str] = {
     """,
     "AttributeAssertion": """
         UNWIND $rows AS row
-        OPTIONAL MATCH (stable:Entity {
-            project_id: row.project_id,
-            id: row.entity_id
-        })
-        WHERE stable.type = row.entity_type
-          AND coalesce(stable.review_status, 'ACCEPTED') <> 'MERGED'
-        OPTIONAL MATCH (candidate:Entity {project_id: row.project_id})
-        WHERE stable IS NULL
-          AND candidate.type = row.entity_type
-          AND coalesce(candidate.review_status, 'ACCEPTED') <> 'MERGED'
-          AND (
-            candidate.name = row.entity_name
-            OR row.entity_name IN coalesce(candidate.aliases, [])
-          )
-        WITH row, stable, candidate,
-             CASE WHEN candidate.name = row.entity_name THEN 0 ELSE 1 END AS match_rank
-        ORDER BY match_rank, candidate.id
-        WITH row, stable, head(collect(candidate)) AS fallback
-        WITH row, coalesce(stable, fallback) AS entity
-        WHERE entity IS NOT NULL
+        MATCH (entity:Entity {project_id: row.project_id})
+        WHERE entity.id = row.entity_id
+          AND entity.type = row.entity_type
+          AND coalesce(entity.review_status, 'ACCEPTED') <> 'MERGED'
         MERGE (assertion:AttributeAssertion {
             project_id: row.project_id,
             id: row.id
@@ -148,6 +160,21 @@ class Neo4jGraphWriter:
                 summary = session.run(UPSERT_QUERIES[label], rows=batch).consume()
                 created += summary.counters.nodes_created
         return created
+
+    def resolve_attribute_entities(
+        self, project_id: str, hints: list[dict[str, str]]
+    ) -> dict[str, str]:
+        if not hints:
+            return {}
+        with self.driver.session() as session:
+            return {
+                record["extracted_id"]: record["canonical_id"]
+                for record in session.run(
+                    RESOLVE_ATTRIBUTE_ENTITIES_QUERY,
+                    project_id=project_id,
+                    hints=hints,
+                )
+            }
 
     def _batches(
         self, rows: Sequence[dict[str, Any]]

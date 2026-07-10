@@ -40,6 +40,14 @@ export function GraphPage() {
   }, [query, projectId])
 
   useEffect(() => {
+    abortEntityRequests()
+    setResults([])
+    setGraph(EMPTY_GRAPH)
+    setDetail(undefined)
+    setSelected(undefined)
+    setGraphDepth(1)
+    setGraphLoading(false)
+    setError('')
     return () => abortEntityRequests()
   }, [abortEntityRequests, projectId])
 

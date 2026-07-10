@@ -10,7 +10,16 @@ class CapturingImporter:
 
     def import_document(self, document):
         self.document = document
-        return ImportSummary()
+        attribute_evidence = {
+            evidence_id
+            for attribute in document.attributes
+            for evidence_id in attribute.evidence_ids
+        }
+        return ImportSummary(
+            retained_attributes=len(document.attributes),
+            retained_attribute_evidence=len(attribute_evidence),
+            retained_evidence=len(document.evidence),
+        )
 
 
 def test_pipeline_aggregates_attribute_evidence_and_reports_quality():

@@ -60,3 +60,31 @@ class GraphImporter:
             created_evidence=created_evidence,
             created_attributes=created_attributes,
         )
+
+    def import_attributes(self, document: GraphDocument) -> ImportSummary:
+        self.writer.ensure_constraints()
+        project_id = document.project.id
+        referenced_evidence_ids = {
+            evidence_id
+            for attribute in document.attributes
+            for evidence_id in attribute.evidence_ids
+        }
+        created_evidence = self.writer.upsert_batch(
+            "Evidence",
+            [
+                {"project_id": project_id, **item.model_dump()}
+                for item in document.evidence
+                if item.id in referenced_evidence_ids
+            ],
+        )
+        created_attributes = self.writer.upsert_batch(
+            "AttributeAssertion",
+            [
+                {"project_id": project_id, **item.model_dump(mode="json")}
+                for item in document.attributes
+            ],
+        )
+        return ImportSummary(
+            created_evidence=created_evidence,
+            created_attributes=created_attributes,
+        )

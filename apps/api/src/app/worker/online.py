@@ -2,7 +2,7 @@ from collections.abc import Callable, Mapping
 
 from app.extraction.pipeline import ExtractionPipeline
 from app.extraction.providers import ProviderRegistry
-from app.jobs.models import Job, JobStatus
+from app.jobs.models import Job, JobKind, JobStatus
 from app.jobs.repository import JobRepository
 from app.projects.files import UploadStore
 from app.projects.repository import ProjectRepository
@@ -42,10 +42,12 @@ class OnlineBuildHandlers:
         if project is None or not project.source_path:
             raise RuntimeError("PROJECT_SOURCE_MISSING")
         source = (self.uploads.root / project.source_path).read_text(encoding="utf-8")
+        attributes_only = JobKind(job.kind) == JobKind.ATTRIBUTE_BACKFILL
         result = self.pipeline.process(
             project.id,
             project.title,
             source,
             self.providers.create(job.model_profile_id),
+            attributes_only=attributes_only,
         )
         self.jobs.save_quality(job.id, result.quality.model_dump())

@@ -158,3 +158,60 @@ def test_pipeline_retries_retryable_provider_errors():
     assert sleeps == [1.2]
     assert output.quality.retry_count == 1
     assert output.quality.successful_chunks == 1
+
+
+def test_attribute_only_pipeline_imports_only_attribute_evidence():
+    source = "第一章 开端\n甲识乙，甲是掌门"
+    fact_start = source.find("甲识乙")
+    attribute_start = source.find("掌门")
+    result = ExtractionResult.model_validate({
+        "entities": [
+            {"local_id": "a", "name": "甲", "type": "Person"},
+            {"local_id": "b", "name": "乙", "type": "Person"},
+        ],
+        "facts": [{
+            "relation": "ALLY_OF",
+            "source_local_id": "a",
+            "target_local_id": "b",
+            "evidence": {
+                "start": fact_start,
+                "end": fact_start + len("甲识乙"),
+                "quote": "甲识乙",
+            },
+        }],
+        "attributes": [{
+            "entity_local_id": "a",
+            "property_id": "identity",
+            "value": "掌门",
+            "evidence": {
+                "start": attribute_start,
+                "end": attribute_start + len("掌门"),
+                "quote": "掌门",
+            },
+        }],
+    })
+
+    class RecordingWriter:
+        def __init__(self):
+            self.rows = {}
+
+        def ensure_constraints(self):
+            pass
+
+        def upsert_batch(self, label, rows):
+            self.rows[label] = rows
+            return len(rows)
+
+    writer = RecordingWriter()
+    output = ExtractionPipeline(GraphImporter(writer)).process(
+        "p-1", "测试", source, FixedProvider(result), attributes_only=True
+    )
+
+    assert set(writer.rows) == {"Evidence", "AttributeAssertion"}
+    referenced_evidence = writer.rows["AttributeAssertion"][0]["evidence_ids"]
+    assert [row["id"] for row in writer.rows["Evidence"]] == referenced_evidence
+    assert output.quality.accepted_facts == 1
+    assert output.import_summary.created_entities == 0
+    assert output.import_summary.created_facts == 0
+    assert output.import_summary.created_evidence == 1
+    assert output.import_summary.created_attributes == 1

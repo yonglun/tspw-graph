@@ -81,6 +81,8 @@ class ExtractionPipeline:
         title: str,
         source: str,
         provider: ExtractionProvider,
+        *,
+        attributes_only: bool = False,
     ) -> PipelineResult:
         split = split_document(source)
         entities: dict[str, EntityRecord] = {}
@@ -165,7 +167,11 @@ class ExtractionPipeline:
             evidence=list(evidence.values()),
             attributes=list(attributes.values()),
         )
-        summary = self.importer.import_document(document)
+        summary = (
+            self.importer.import_attributes(document)
+            if attributes_only
+            else self.importer.import_document(document)
+        )
         return PipelineResult(
             quality=QualityReport(
                 total_chunks=len(split.chunks),

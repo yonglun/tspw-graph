@@ -32,6 +32,26 @@ class EmptyProvider:
         return ExtractionResult(entities=[], facts=[])
 
 
+def test_pipeline_sends_effective_property_definitions_to_provider():
+    class CapturingProvider:
+        def __init__(self):
+            self.ontology = None
+
+        def extract(self, request):
+            self.ontology = request.ontology
+            return ExtractionResult()
+
+    provider = CapturingProvider()
+    pipeline = ExtractionPipeline(GraphImporter(MemoryWriter()))
+
+    pipeline.process("p-1", "测试", "第一章 开端\n正文", provider)
+
+    sect_property_ids = {
+        item["id"] for item in provider.ontology["property_definitions"]["Sect"]
+    }
+    assert {"characteristic", "activity_region"} <= sect_property_ids
+
+
 def test_fixed_provider_pipeline_is_idempotent():
     result = ExtractionResult.model_validate({
         "entities": [

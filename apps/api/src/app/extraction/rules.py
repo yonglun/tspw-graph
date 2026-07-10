@@ -112,4 +112,8 @@ def rule_based_extract(chunk: TextChunk, result: ExtractionResult) -> Extraction
             facts.append(fact)
             fact_keys.add(key)
 
-    return ExtractionResult(entities=entities, facts=facts)
+    return ExtractionResult(
+        entities=entities,
+        facts=facts,
+        attributes=list(result.attributes),
+    )

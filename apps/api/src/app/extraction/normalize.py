@@ -1,11 +1,23 @@
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 import hashlib
 import re
 
-from app.extraction.models import ExtractionResult
+from app.extraction.models import CandidateEvidence, ExtractionResult
 from app.extraction.splitter import TextChunk
-from app.graph.models import EntityRecord, EvidenceRecord, FactRecord
-from app.ontology.models import EntityType, RelationType
+from app.graph.models import (
+    AttributeAssertionRecord,
+    EntityRecord,
+    EvidenceRecord,
+    FactRecord,
+)
+from app.ontology.models import (
+    EntityType,
+    PropertyDefinition,
+    PropertyValueType,
+    RelationType,
+)
+from app.ontology.properties import property_definition_for
 
 
 MAX_EVIDENCE_QUOTE_LENGTH = 500
@@ -21,6 +33,7 @@ class Rejection:
 class NormalizedChunk:
     entities: list[EntityRecord] = field(default_factory=list)
     facts: list[FactRecord] = field(default_factory=list)
+    attributes: list[AttributeAssertionRecord] = field(default_factory=list)
     evidence: list[EvidenceRecord] = field(default_factory=list)
     rejections: list[Rejection] = field(default_factory=list)
 
@@ -43,11 +56,74 @@ def _aligned_evidence_range(chunk_text: str, start: int, end: int, quote: str) -
     return aligned_start, aligned_start + len(quote)
 
 
+def _normalized_attribute_value(
+    value: str, definition: PropertyDefinition
+) -> tuple[str | None, str | None]:
+    normalized = value.strip()
+    if not normalized:
+        return None, "EMPTY_ATTRIBUTE_VALUE"
+    if definition.value_type == PropertyValueType.ENUM:
+        if normalized not in definition.enum_values:
+            return None, "INVALID_ATTRIBUTE_ENUM"
+    elif definition.value_type == PropertyValueType.NUMBER:
+        try:
+            number = Decimal(normalized)
+        except InvalidOperation:
+            return None, "INVALID_ATTRIBUTE_NUMBER"
+        if not number.is_finite():
+            return None, "INVALID_ATTRIBUTE_NUMBER"
+        normalized = format(number, "f")
+        if "." in normalized:
+            normalized = normalized.rstrip("0").rstrip(".")
+        if normalized in {"", "-0"}:
+            normalized = "0"
+    elif definition.value_type == PropertyValueType.BOOLEAN:
+        normalized = normalized.lower()
+        if normalized not in {"true", "false"}:
+            return None, "INVALID_ATTRIBUTE_BOOLEAN"
+    return normalized, None
+
+
 def normalize_chunk_result(
     project_id: str, chunk: TextChunk, result: ExtractionResult
 ) -> NormalizedChunk:
     normalized = NormalizedChunk()
     local_ids: dict[str, str] = {}
+    entities_by_local_id: dict[str, EntityRecord] = {}
+    evidence_by_id: dict[str, EvidenceRecord] = {}
+
+    def evidence_record(
+        evidence: CandidateEvidence, mismatch_code: str, too_long_code: str
+    ) -> str | None:
+        if len(evidence.quote) > MAX_EVIDENCE_QUOTE_LENGTH:
+            normalized.rejections.append(Rejection(too_long_code))
+            return None
+        aligned_range = _aligned_evidence_range(
+            chunk.text, evidence.start, evidence.end, evidence.quote
+        )
+        if aligned_range is None:
+            normalized.rejections.append(Rejection(mismatch_code))
+            return None
+        aligned_start, aligned_end = aligned_range
+        absolute_start = chunk.start_offset + aligned_start
+        absolute_end = chunk.start_offset + aligned_end
+        evidence_id = (
+            f"{project_id}:evidence:"
+            f"{_stable_id(chunk.id, str(absolute_start), evidence.quote)}"
+        )
+        if evidence_id not in evidence_by_id:
+            record = EvidenceRecord(
+                id=evidence_id,
+                chapter_id=f"{project_id}:chapter:{chunk.chapter_number}",
+                start_offset=absolute_start,
+                end_offset=absolute_end,
+                quote=evidence.quote,
+                text_hash=hashlib.sha256(evidence.quote.encode()).hexdigest(),
+            )
+            evidence_by_id[evidence_id] = record
+            normalized.evidence.append(record)
+        return evidence_id
+
     for candidate in result.entities:
         local_id = candidate.local_id.strip()
         name = candidate.name.strip()
@@ -70,16 +146,16 @@ def normalize_chunk_result(
             continue
         entity_id = f"{project_id}:{entity_type.value}:{_stable_id(name)}"
         local_ids[local_id] = entity_id
-        normalized.entities.append(
-            EntityRecord(
-                id=entity_id,
-                type=entity_type,
-                name=name,
-                aliases=sorted(
-                    set(alias.strip() for alias in candidate.aliases if alias.strip())
-                ),
-            )
+        entity_record = EntityRecord(
+            id=entity_id,
+            type=entity_type,
+            name=name,
+            aliases=sorted(
+                set(alias.strip() for alias in candidate.aliases if alias.strip())
+            ),
         )
+        entities_by_local_id[local_id] = entity_record
+        normalized.entities.append(entity_record)
 
     for candidate in result.facts:
         relation_text = candidate.relation.strip()
@@ -95,31 +171,12 @@ def normalize_chunk_result(
         if not source_id or not target_id:
             normalized.rejections.append(Rejection("UNKNOWN_FACT_ENTITY"))
             continue
-        evidence = candidate.evidence
-        if len(evidence.quote) > MAX_EVIDENCE_QUOTE_LENGTH:
-            normalized.rejections.append(Rejection("EVIDENCE_TOO_LONG"))
-            continue
-        aligned_range = _aligned_evidence_range(
-            chunk.text, evidence.start, evidence.end, evidence.quote
+        evidence_id = evidence_record(
+            candidate.evidence, "EVIDENCE_MISMATCH", "EVIDENCE_TOO_LONG"
         )
-        if aligned_range is None:
-            normalized.rejections.append(Rejection("EVIDENCE_MISMATCH"))
+        if evidence_id is None:
             continue
-        aligned_start, aligned_end = aligned_range
-        absolute_start = chunk.start_offset + aligned_start
-        absolute_end = chunk.start_offset + aligned_end
-        evidence_id = f"{project_id}:evidence:{_stable_id(chunk.id, str(absolute_start), evidence.quote)}"
         fact_id = f"{project_id}:fact:{_stable_id(relation.value, source_id, target_id)}"
-        normalized.evidence.append(
-            EvidenceRecord(
-                id=evidence_id,
-                chapter_id=f"{project_id}:chapter:{chunk.chapter_number}",
-                start_offset=absolute_start,
-                end_offset=absolute_end,
-                quote=evidence.quote,
-                text_hash=hashlib.sha256(evidence.quote.encode()).hexdigest(),
-            )
-        )
         normalized.facts.append(
             FactRecord(
                 id=fact_id,
@@ -129,6 +186,50 @@ def normalize_chunk_result(
                 evidence_ids=[evidence_id],
                 from_chapter=chunk.chapter_number,
                 confidence=candidate.confidence,
+            )
+        )
+
+    for candidate in result.attributes:
+        entity = entities_by_local_id.get(candidate.entity_local_id.strip())
+        if entity is None:
+            normalized.rejections.append(Rejection("UNKNOWN_ATTRIBUTE_ENTITY"))
+            continue
+        property_id = candidate.property_id.strip()
+        definition = property_definition_for(entity.type, property_id)
+        if definition is None:
+            normalized.rejections.append(
+                Rejection("UNKNOWN_ENTITY_PROPERTY", property_id)
+            )
+            continue
+        value, rejection_code = _normalized_attribute_value(
+            candidate.value, definition
+        )
+        if rejection_code is not None:
+            normalized.rejections.append(Rejection(rejection_code))
+            continue
+        evidence_id = evidence_record(
+            candidate.evidence,
+            "ATTRIBUTE_EVIDENCE_MISMATCH",
+            "ATTRIBUTE_EVIDENCE_TOO_LONG",
+        )
+        if evidence_id is None:
+            continue
+        assert value is not None
+        attribute_id = (
+            f"{project_id}:attribute:"
+            f"{_stable_id(project_id, entity.id, property_id, value)}"
+        )
+        normalized.attributes.append(
+            AttributeAssertionRecord(
+                id=attribute_id,
+                entity_id=entity.id,
+                entity_name=entity.name,
+                entity_type=entity.type,
+                property_id=property_id,
+                value=value,
+                value_type=definition.value_type,
+                confidence=candidate.confidence,
+                evidence_ids=[evidence_id],
             )
         )
     return normalized

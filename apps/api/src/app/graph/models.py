@@ -2,7 +2,7 @@ from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.ontology.models import EntityType, RelationType
+from app.ontology.models import EntityType, PropertyValueType, RelationType
 
 
 class ProjectRecord(BaseModel):
@@ -35,6 +35,18 @@ class FactRecord(BaseModel):
     confidence: float = Field(default=1.0, ge=0, le=1)
 
 
+class AttributeAssertionRecord(BaseModel):
+    id: str
+    entity_id: str
+    entity_name: str
+    entity_type: EntityType
+    property_id: str
+    value: str
+    value_type: PropertyValueType
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    evidence_ids: list[str] = Field(min_length=1)
+
+
 class EvidenceRecord(BaseModel):
     id: str
     chapter_id: str
@@ -56,6 +68,7 @@ class GraphDocument(BaseModel):
     entities: list[EntityRecord]
     facts: list[FactRecord]
     evidence: list[EvidenceRecord]
+    attributes: list[AttributeAssertionRecord] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def references_exist(self) -> Self:
@@ -67,6 +80,13 @@ class GraphDocument(BaseModel):
                 raise ValueError(f"fact {fact.id} references an unknown entity")
             if not set(fact.evidence_ids) <= evidence_ids:
                 raise ValueError(f"fact {fact.id} references unknown evidence")
+        for attribute in self.attributes:
+            if attribute.entity_id not in entity_ids:
+                raise ValueError(
+                    f"attribute {attribute.id} references an unknown entity"
+                )
+            if not set(attribute.evidence_ids) <= evidence_ids:
+                raise ValueError(f"attribute {attribute.id} references unknown evidence")
         for item in self.evidence:
             if item.chapter_id not in chapter_ids:
                 raise ValueError(f"evidence {item.id} references an unknown chapter")
@@ -77,6 +97,7 @@ class ImportSummary(BaseModel):
     created_entities: int = 0
     created_facts: int = 0
     created_evidence: int = 0
+    created_attributes: int = 0
 
 
 class EntitySummary(BaseModel):

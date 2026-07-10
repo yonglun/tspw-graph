@@ -15,8 +15,8 @@ from app.extraction.rules import rule_based_extract
 from app.extraction.splitter import split_document
 from app.graph.importer import GraphImporter
 from app.graph.models import (
-    ChapterRecord, EntityRecord, EvidenceRecord, FactRecord, GraphDocument,
-    ImportSummary, ProjectRecord,
+    AttributeAssertionRecord, ChapterRecord, EntityRecord, EvidenceRecord,
+    FactRecord, GraphDocument, ImportSummary, ProjectRecord,
 )
 from app.ontology.catalog import CATALOG
 
@@ -28,6 +28,8 @@ class QualityReport(BaseModel):
     accepted_entities: int
     accepted_facts: int
     accepted_evidence: int
+    accepted_attributes: int = 0
+    accepted_attribute_evidence: int = 0
     ambiguous_entities: int = 0
     rejected_by_code: dict[str, int] = Field(default_factory=dict)
     model_calls: int
@@ -84,6 +86,7 @@ class ExtractionPipeline:
         entities: dict[str, EntityRecord] = {}
         evidence: dict[str, EvidenceRecord] = {}
         facts: dict[str, FactRecord] = {}
+        attributes: dict[str, AttributeAssertionRecord] = {}
         rejections: Counter[str] = Counter()
         failed_chunks = 0
         successful_chunks = 0
@@ -103,6 +106,13 @@ class ExtractionPipeline:
                             "relation_types": [
                                 item.id.value for item in CATALOG.relation_types
                             ],
+                            "property_definitions": {
+                                item.id.value: [
+                                    definition.model_dump(mode="json")
+                                    for definition in item.effective_property_definitions
+                                ]
+                                for item in CATALOG.entity_types
+                            },
                         },
                     ),
                 )
@@ -126,6 +136,18 @@ class ExtractionPipeline:
                     )
                 else:
                     facts[item.id] = item
+            for item in normalized.attributes:
+                existing = attributes.get(item.id)
+                if existing:
+                    attributes[item.id] = existing.model_copy(
+                        update={
+                            "evidence_ids": sorted(
+                                set(existing.evidence_ids + item.evidence_ids)
+                            )
+                        }
+                    )
+                else:
+                    attributes[item.id] = item
             rejections.update(item.code for item in normalized.rejections)
 
         document = GraphDocument(
@@ -141,6 +163,7 @@ class ExtractionPipeline:
             entities=list(entities.values()),
             facts=list(facts.values()),
             evidence=list(evidence.values()),
+            attributes=list(attributes.values()),
         )
         summary = self.importer.import_document(document)
         return PipelineResult(
@@ -151,6 +174,14 @@ class ExtractionPipeline:
                 accepted_entities=len(entities),
                 accepted_facts=len(facts),
                 accepted_evidence=len(evidence),
+                accepted_attributes=len(attributes),
+                accepted_attribute_evidence=len(
+                    {
+                        evidence_id
+                        for attribute in attributes.values()
+                        for evidence_id in attribute.evidence_ids
+                    }
+                ),
                 rejected_by_code=dict(rejections),
                 model_calls=len(split.chunks),
                 retry_count=retry_count,

@@ -204,6 +204,44 @@ def test_entity_detail_includes_attributes_and_relation_summaries() -> None:
     assert detail.facts[0].evidence[0].quote == "岳不群传授令狐冲"
 
 
+def test_relation_detail_returns_relation_evidence() -> None:
+    class Repository:
+        def relation_detail(self, project_id, relation_id):
+            return {
+                "id": relation_id,
+                "type": "MASTER_OF",
+                "source_id": "yue",
+                "target_id": "linghu",
+                "review_status": "ACCEPTED",
+                "evidence": [
+                    {
+                        "id": "ev-master",
+                        "chapter_id": "chapter-1",
+                        "chapter_number": 1,
+                        "chapter_title": "第一章",
+                        "start_offset": 20,
+                        "end_offset": 30,
+                        "quote": "岳不群传授令狐冲",
+                    }
+                ],
+            }
+
+    relation = GraphService(Repository()).relation_detail("p-1", "fact-master")
+
+    assert relation.id == "fact-master"
+    assert relation.type == "MASTER_OF"
+    assert relation.evidence[0].quote == "岳不群传授令狐冲"
+
+
+def test_missing_relation_detail_raises_not_found() -> None:
+    class Repository:
+        def relation_detail(self, project_id, relation_id):
+            return None
+
+    with pytest.raises(EntityNotFoundError):
+        GraphService(Repository()).relation_detail("p-1", "missing")
+
+
 class FakeResult:
     def __init__(self, record):
         self.record = record

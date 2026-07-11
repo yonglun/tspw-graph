@@ -132,6 +132,57 @@ def test_entity_detail_serializes_attributes_and_relations() -> None:
     assert body["facts"][0]["id"] == "fact-master"
 
 
+def test_relation_detail_serializes_evidence() -> None:
+    class Repository:
+        def relation_detail(self, project_id: str, relation_id: str):
+            return {
+                "id": relation_id,
+                "type": "MASTER_OF",
+                "source_id": "yue",
+                "target_id": "linghu",
+                "review_status": "ACCEPTED",
+                "evidence": [
+                    {
+                        "id": "ev-master",
+                        "chapter_id": "chapter-1",
+                        "chapter_number": 1,
+                        "chapter_title": "第一章",
+                        "start_offset": 20,
+                        "end_offset": 30,
+                        "quote": "岳不群传授令狐冲",
+                    }
+                ],
+            }
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        response = TestClient(app).get(
+            "/api/graph/relations/fact-master", params={"project_id": "p-1"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+    assert response.status_code == 200
+    assert response.json()["evidence"][0]["quote"] == "岳不群传授令狐冲"
+
+
+def test_relation_detail_returns_not_found_for_missing_relation() -> None:
+    class Repository:
+        def relation_detail(self, project_id: str, relation_id: str):
+            return None
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        response = TestClient(app).get(
+            "/api/graph/relations/missing", params={"project_id": "p-1"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "ENTITY_NOT_FOUND"
+
+
 def test_app_lifespan_reuses_and_closes_one_neo4j_driver() -> None:
     driver = Mock()
 

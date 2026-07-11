@@ -3,7 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
-from app.graph.models import EntityDetail, EntitySummary, Neighborhood, TimelineEvent
+from app.graph.models import (
+    EntityDetail,
+    EntitySummary,
+    Neighborhood,
+    RelatedFact,
+    TimelineEvent,
+)
 from app.graph.repository import Neo4jGraphRepository
 from app.graph.service import EntityNotFoundError, GraphService
 
@@ -95,3 +101,12 @@ def entity_detail(
     repository: Repository, entity_id: str, project_id: str
 ) -> EntityDetail:
     return execute(lambda: GraphService(repository).entity_detail(project_id, entity_id))
+
+
+@router.get("/api/graph/relations/{relation_id}", response_model=RelatedFact)
+def relation_detail(
+    repository: Repository, relation_id: str, project_id: str
+) -> RelatedFact:
+    return execute(
+        lambda: GraphService(repository).relation_detail(project_id, relation_id)
+    )

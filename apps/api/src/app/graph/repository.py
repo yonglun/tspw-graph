@@ -18,6 +18,10 @@ class GraphRepository(Protocol):
         self, project_id: str, query: str, types: list[str], limit: int
     ) -> list[dict[str, Any]]: ...
 
+    def relation_detail(
+        self, project_id: str, relation_id: str
+    ) -> dict[str, Any] | None: ...
+
 
 class Neo4jGraphRepository:
     def __init__(self, driver: Driver) -> None:
@@ -291,6 +295,46 @@ class Neo4jGraphRepository:
                 "attributes": record["attributes"],
                 "rows": record["rows"],
             }
+
+    def relation_detail(self, project_id: str, relation_id: str) -> dict[str, Any] | None:
+        statement = """
+            MATCH (fact:Fact {project_id: $project_id, id: $relation_id})
+            WHERE coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
+            MATCH (fact)-[:SOURCE]->(source:Entity {project_id: $project_id})
+            MATCH (fact)-[:TARGET]->(target:Entity {project_id: $project_id})
+            WHERE coalesce(source.review_status, 'ACCEPTED') <> 'MERGED'
+              AND coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
+            OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence)
+                -[:IN_CHAPTER]->(chapter:Chapter)
+            WITH fact, source, target, evidence, chapter
+            RETURN {
+                id: fact.id,
+                type: fact.type,
+                source_id: source.id,
+                target_id: target.id,
+                review_status: fact.review_status,
+                evidence: collect(DISTINCT {
+                    id: evidence.id,
+                    chapter_id: chapter.id,
+                    chapter_number: chapter.number,
+                    chapter_title: chapter.title,
+                    start_offset: evidence.start_offset,
+                    end_offset: evidence.end_offset,
+                    quote: evidence.quote
+                })
+            } AS relation
+        """
+        with self.driver.session() as session:
+            record = session.run(
+                statement, project_id=project_id, relation_id=relation_id
+            ).single()
+            if record is None:
+                return None
+            relation = dict(record["relation"])
+            relation["evidence"] = [
+                item for item in relation.get("evidence", []) if item.get("id") is not None
+            ]
+            return relation
 
     def timeline(
         self,

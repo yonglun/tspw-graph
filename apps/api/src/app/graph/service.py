@@ -110,6 +110,17 @@ class GraphService:
             facts=facts,
         )
 
+    def relation_detail(self, project_id: str, relation_id: str) -> RelatedFact:
+        result = self.repository.relation_detail(project_id, relation_id)
+        if result is None:
+            raise EntityNotFoundError(relation_id)
+        return RelatedFact.model_validate(
+            {
+                **result,
+                "evidence": self._deduplicate_evidence(result.get("evidence", [])),
+            }
+        )
+
     def _attribute_details(
         self, entity: EntitySummary, rows: list[dict[str, Any]]
     ) -> list[AttributeDetail]:

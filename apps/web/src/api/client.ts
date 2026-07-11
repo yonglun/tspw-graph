@@ -27,6 +27,8 @@ export type Fact = {
   evidence: Evidence[]
 }
 
+export type RelationEvidence = Fact & { review_status?: string }
+
 export type AttributeDetail = {
   id: string
   property_id: string
@@ -64,9 +66,26 @@ export type GraphEdge = {
 export type Neighborhood = { nodes: EntitySummary[]; edges: GraphEdge[] }
 
 export type OntologyCatalog = {
-  entity_types: Array<{ id: string; label: string; description: string; color: string; parent?: string }>
+  entity_types: Array<{
+    id: string
+    label: string
+    description: string
+    color: string
+    parent?: string
+    property_definitions?: PropertyDefinition[]
+    effective_property_definitions?: PropertyDefinition[]
+  }>
   relation_types: Array<{ id: string; label: string; description: string; source_types: string[]; target_types: string[]; symmetric: boolean; temporal: boolean }>
   example: { subject: string; predicate: string; object: string }
+}
+
+export type PropertyDefinition = {
+  id: string
+  label: string
+  description: string
+  value_type: string
+  multiple: boolean
+  enum_values: string[]
 }
 
 export type AskResponse = {

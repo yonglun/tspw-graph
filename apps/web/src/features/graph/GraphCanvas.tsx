@@ -8,10 +8,14 @@ export function GraphCanvas({
   graph,
   centerId,
   onSelect,
+  selectedRelationId,
+  onSelectEdge,
 }: {
   graph: Neighborhood
   centerId?: string
   onSelect: (id: string) => void
+  selectedRelationId?: string
+  onSelectEdge: (id: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -21,12 +25,13 @@ export function GraphCanvas({
       headless: ref.current.clientWidth === 0,
       elements: [
         ...graph.nodes.map(node => ({ data: { id: node.id, label: node.name, type: node.type, color: getEntityTypeStyle(node.type).color } })),
-        ...graph.edges.map(edge => ({ data: { id: edge.id, source: edge.source_id, target: edge.target_id, label: edge.type } })),
+        ...graph.edges.map(edge => ({ data: { id: edge.id, source: edge.source_id, target: edge.target_id, label: edge.type, selected: edge.id === selectedRelationId } })),
       ],
       style: [
         { selector: 'node', style: { 'background-color': 'data(color)', color: '#24211d', label: 'data(label)', 'font-family': 'system-ui', 'font-size': 12, 'text-valign': 'bottom', 'text-margin-y': 8, width: 32, height: 32 } },
         { selector: 'node[type = "Person"]', style: { width: 38, height: 38 } },
         { selector: 'edge', style: { width: 1.5, 'line-color': '#b9b1a4', 'target-arrow-color': '#b9b1a4', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', label: 'data(label)', 'font-size': 8, color: '#736b60' } },
+        { selector: 'edge[selected = "true"]', style: { width: 4, 'line-color': '#a8322d', 'target-arrow-color': '#a8322d', color: '#a8322d', 'font-size': 10 } },
       ],
       layout: {
         name: 'concentric',
@@ -38,7 +43,8 @@ export function GraphCanvas({
       },
     })
     cy.on('tap', 'node', event => onSelect(event.target.id()))
+    cy.on('tap', 'edge', event => onSelectEdge(event.target.id()))
     return () => cy.destroy()
-  }, [centerId, graph, onSelect])
+  }, [centerId, graph, onSelect, onSelectEdge, selectedRelationId])
   return <div ref={ref} className="graph-canvas" aria-label="知识图谱画布">{graph.nodes.length === 0 && <div className="canvas-empty"><b>从一个人物开始</b><p>搜索实体后，图谱只展开相关邻居，避免全图失控。</p></div>}<ul className="graph-node-list" aria-label="图谱节点">{graph.nodes.map(node => <li key={node.id}>{node.name}</li>)}</ul></div>
 }

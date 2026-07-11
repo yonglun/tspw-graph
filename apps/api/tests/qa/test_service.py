@@ -131,6 +131,27 @@ def test_answer_includes_path_and_evidence() -> None:
     assert "$project_id" in answer.cypher_template
 
 
+def test_relation_answer_includes_all_matching_targets_and_evidence() -> None:
+    class MultiFactRepository(FakeRepository):
+        def entity_detail(self, project_id: str, entity_id: str) -> dict[str, Any] | None:
+            detail = super().entity_detail(project_id, entity_id)
+            if entity_id == "linghu":
+                assert detail is not None
+                detail["rows"] = [
+                    {"id": "f-sword", "type": "KNOWS", "source_id": "linghu", "target_id": "sword-1", "target": {"id": "sword-1", "name": "独孤九剑"}, "evidence": EVIDENCE},
+                    {"id": "f-sword-2", "type": "KNOWS", "source_id": "linghu", "target_id": "sword-2", "target": {"id": "sword-2", "name": "吸星大法"}, "evidence": {**EVIDENCE, "id": "e2", "quote": "吸星大法"}},
+                ]
+            if entity_id in {"sword-1", "sword-2"}:
+                return {"entity": {"id": entity_id, "project_id": project_id, "type": "Swordplay", "name": "独孤九剑" if entity_id == "sword-1" else "吸星大法", "aliases": [], "description": ""}, "rows": []}
+            return detail
+
+    answer = QaService(MultiFactRepository()).ask("xiaoao", "令狐冲掌握什么武功？")
+
+    assert answer.answer == "令狐沖掌握独孤九剑、吸星大法。"
+    assert [step.target_name for step in answer.path] == ["独孤九剑", "吸星大法"]
+    assert {item.id for item in answer.evidence} == {"e1", "e2"}
+
+
 def test_exact_subject_match_wins_when_search_returns_containing_entities() -> None:
     answer = QaService(AmbiguousSearchRepository()).ask("xiaoao", "令狐冲的师父是谁？")
 

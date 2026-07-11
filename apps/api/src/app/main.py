@@ -5,6 +5,7 @@ from neo4j import GraphDatabase
 
 from app.graph.router import router as graph_router
 from app.extraction.router import router as extraction_router
+from app.extraction.providers import ProviderError, ProviderRegistry
 from app.jobs.router import router as jobs_router
 from app.ontology.router import router as ontology_router
 from app.projects.router import router as projects_router
@@ -21,6 +22,12 @@ async def lifespan(app: FastAPI):
         auth=(settings.neo4j_user, settings.neo4j_password),
     )
     app.state.neo4j_driver = driver
+    try:
+        app.state.qa_intent_provider = ProviderRegistry(settings).create_qa_intent(
+            settings.qa_model_profile_id
+        )
+    except ProviderError:
+        app.state.qa_intent_provider = None
     try:
         yield
     finally:

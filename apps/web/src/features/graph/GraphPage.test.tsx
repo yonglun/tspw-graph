@@ -89,6 +89,34 @@ describe('GraphPage', () => {
     expect(screen.getByRole('button', { name: '加入审核' })).toBeVisible()
   })
 
+  it('loads relation evidence when a relation summary is selected and highlights attributes', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/graph/search')) return new Response(JSON.stringify([entity]))
+      if (url.includes('/api/graph/neighborhood')) return new Response(JSON.stringify({ nodes: [entity, yue], edges: [{ id: 'fact-1', source_id: 'yue', target_id: entity.id, type: 'MASTER_OF', confidence: 1 }] }))
+      if (url.includes('/api/entities/')) return new Response(JSON.stringify({
+        ...entity,
+        attributes: [{ id: 'attr-identity', property_id: 'identity', label: '身份', value_type: 'TEXT', value: '华山派大弟子', confidence: 1, evidence: [{ id: 'attr-ev', chapter_id: 'c1', chapter_number: 1, chapter_title: '第一章', start_offset: 1, end_offset: 4, quote: '华山派大弟子' }] }],
+        relations: [{ fact_id: 'fact-1', type: 'MASTER_OF', label: '师父', direction: 'INCOMING', other: { id: 'yue', type: 'Person', name: '岳不群' } }],
+        facts: [{ id: 'fact-1', type: 'MASTER_OF', source_id: 'yue', target_id: entity.id, evidence: [{ id: 'old-ev', chapter_id: 'c1', chapter_number: 1, chapter_title: '第一章', start_offset: 5, end_offset: 8, quote: '旧关系证据' }] }],
+      }))
+      if (url.includes('/api/graph/relations/fact-1')) return new Response(JSON.stringify({ id: 'fact-1', type: 'MASTER_OF', source_id: 'yue', target_id: entity.id, evidence: [{ id: 'new-ev', chapter_id: 'c2', chapter_number: 2, chapter_title: '第二章', start_offset: 8, end_offset: 12, quote: '关系原文证据' }] }))
+      return new Response(JSON.stringify({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<GraphPage />)
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+    await user.click(await screen.findByRole('button', { name: /师父.*岳不群/ }))
+
+    expect(await screen.findByText('关系原文证据')).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/graph/relations/fact-1'), expect.anything())
+    await user.click(screen.getByText('身份'))
+    expect(screen.getAllByText('华山派大弟子').length).toBeGreaterThanOrEqual(1)
+  })
+
   it('shows an empty attribute state when no attributes were extracted', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = String(input)

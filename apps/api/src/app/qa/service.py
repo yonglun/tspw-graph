@@ -3,7 +3,7 @@ from typing import Any
 from app.extraction.providers import ProviderError
 from app.graph.models import EvidenceDetail
 from app.ontology.catalog import CATALOG
-from app.qa.intents import QaIntent, parse_local_intent
+from app.qa.intents import QaIntent, normalize_question, parse_local_intent
 from app.qa.models import AskResponse, QaPathStep
 from app.qa.templates import RELATION_TEMPLATES
 
@@ -27,6 +27,8 @@ class QaService:
             return self._empty(project_id)
 
         if intent.intent == "UNSUPPORTED":
+            return self._empty(project_id)
+        if intent.subject and intent.subject not in normalize_question(question):
             return self._empty(project_id)
 
         subject = intent.subject

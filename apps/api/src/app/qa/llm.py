@@ -42,28 +42,33 @@ class QaIntentProvider:
                 for prop in entity.effective_property_definitions
             }
         )
-        response = self.client.post(
-            f"{self.base_url}/openai/deployments/{self.deployment}/chat/completions",
-            params={"api-version": self.api_version},
-            headers={"api-key": self.api_key},
-            json={
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": self._system_prompt(relation_ids, property_ids),
-                    },
-                    {"role": "user", "content": question},
-                ],
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "qa_intent",
-                        "strict": True,
-                        "schema": self._schema(relation_ids, property_ids),
+        try:
+            response = self.client.post(
+                f"{self.base_url}/openai/deployments/{self.deployment}/chat/completions",
+                params={"api-version": self.api_version},
+                headers={"api-key": self.api_key},
+                json={
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": self._system_prompt(relation_ids, property_ids),
+                        },
+                        {"role": "user", "content": question},
+                    ],
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "qa_intent",
+                            "strict": True,
+                            "schema": self._schema(relation_ids, property_ids),
+                        },
                     },
                 },
-            },
-        )
+            )
+        except httpx.HTTPError as error:
+            raise ProviderError(
+                ProviderErrorKind.RETRYABLE, "QA_MODEL_NETWORK_ERROR"
+            ) from error
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as error:

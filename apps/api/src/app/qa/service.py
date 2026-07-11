@@ -1,29 +1,41 @@
 from typing import Any
 
+from app.extraction.providers import ProviderError
 from app.graph.models import EvidenceDetail
+from app.ontology.catalog import CATALOG
+from app.qa.intents import QaIntent, parse_local_intent
 from app.qa.models import AskResponse, QaPathStep
-from app.qa.templates import RELATION_TEMPLATES, classify, subject_text
+from app.qa.templates import RELATION_TEMPLATES
 
 
 NO_FACTS = "图谱中暂无足够事实"
 
 
 class QaService:
-    def __init__(self, repository: Any) -> None:
+    def __init__(self, repository: Any, intent_provider: Any | None = None) -> None:
         self.repository = repository
+        self.intent_provider = intent_provider
 
     def ask(self, project_id: str, question: str) -> AskResponse:
-        intent = classify(question)
+        intent = parse_local_intent(question)
+        if intent is None and self.intent_provider is not None:
+            try:
+                intent = self.intent_provider.parse(question, CATALOG)
+            except ProviderError:
+                return self._empty(project_id)
         if intent is None:
             return self._empty(project_id)
 
-        subject = subject_text(question)
-        matches = self.repository.search(project_id, subject, ["Person"], 5)
+        if intent.intent == "UNSUPPORTED":
+            return self._empty(project_id)
+
+        subject = intent.subject
+        matches = self.repository.search(project_id, subject, [], 5)
         entity = self._resolve_subject(matches, subject)
         if entity is None:
             return self._empty(project_id)
 
-        if intent == "introduction":
+        if intent.intent == "INTRODUCTION":
             description = entity.get("description", "").strip()
             if not description:
                 return self._empty(project_id)
@@ -34,10 +46,19 @@ class QaService:
                 parameters={"project_id": project_id, "entity_id": entity["id"]},
             )
 
-        template = RELATION_TEMPLATES[intent]
         detail = self.repository.entity_detail(project_id, entity["id"])
         if detail is None:
             return self._empty(project_id)
+        if intent.intent == "ATTRIBUTE":
+            return self._attribute_answer(entity, detail, intent)
+
+        template_key = next(
+            (key for key, item in RELATION_TEMPLATES.items() if item.relation == intent.relation),
+            None,
+        )
+        if template_key is None:
+            return self._empty(project_id)
+        template = RELATION_TEMPLATES[template_key]
         for row in detail["rows"]:
             if row.get("review_status") == "REJECTED":
                 continue
@@ -63,7 +84,7 @@ class QaService:
                 else []
             )
             return AskResponse(
-                answer=self._answer(intent, entity["name"], related_entity["name"]),
+                answer=self._answer(template_key, entity["name"], related_entity["name"]),
                 path=[
                     QaPathStep(
                         source_name=(
@@ -85,6 +106,56 @@ class QaService:
                 evidence=evidence_rows,
             )
         return self._empty(project_id)
+
+    def _attribute_answer(
+        self,
+        entity: dict[str, Any],
+        detail: dict[str, Any],
+        intent: QaIntent,
+    ) -> AskResponse:
+        attributes = [
+            row
+            for row in detail.get("attributes", [])
+            if row.get("property_id") == intent.property
+        ]
+        evidence: list[EvidenceDetail] = []
+        values: list[str] = []
+        for attribute in attributes:
+            attribute_evidence = [
+                EvidenceDetail.model_validate(item)
+                for item in attribute.get("evidence", [])
+                if item.get("id")
+            ]
+            if not attribute_evidence:
+                continue
+            values.append(str(attribute.get("value", "")))
+            evidence.extend(attribute_evidence)
+        if not values:
+            return self._empty(entity.get("project_id", ""))
+
+        label = next(
+            (
+                definition_property.label
+                for definition in CATALOG.entity_types
+                for definition_property in definition.effective_property_definitions
+                if definition_property.id == intent.property
+            ),
+            intent.property or "属性",
+        )
+        unique_values = list(dict.fromkeys(value for value in values if value))
+        if not unique_values:
+            return self._empty(entity.get("project_id", ""))
+        return AskResponse(
+            answer=f"{entity['name']}的{label}是{'、'.join(unique_values)}。",
+            query_explanation="按实体属性断言读取，并要求至少一条原文证据。",
+            cypher_template="MATCH (entity:Entity {project_id: $project_id, id: $entity_id})-[:HAS_ATTRIBUTE]->(attribute:AttributeAssertion) RETURN attribute",
+            parameters={
+                "project_id": entity.get("project_id", ""),
+                "entity_id": entity["id"],
+                "property_id": intent.property or "",
+            },
+            evidence=list({item.id: item for item in evidence}.values()),
+        )
 
     def _answer(self, intent: str, entity_name: str, related_name: str) -> str:
         if intent == "master":

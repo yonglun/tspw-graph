@@ -1,6 +1,7 @@
 from typing import Any
 
 from app.qa.service import QaService
+from app.qa.intents import QaIntent
 
 
 EVIDENCE = {
@@ -24,10 +25,35 @@ class FakeRepository:
         if entity_id == "linghu":
             return {
                 "entity": {"id": "linghu", "project_id": project_id, "type": "Person", "name": "令狐沖", "aliases": [], "description": "华山派大弟子。"},
-                "rows": [{"id": "f1", "type": "MASTER_OF", "source_id": "yue", "target_id": "linghu", "evidence": EVIDENCE}],
+                "attributes": [
+                    {
+                        "id": "a-gender",
+                        "property_id": "gender",
+                        "label": "性别",
+                        "value_type": "ENUM",
+                        "value": "男",
+                        "confidence": 1.0,
+                        "evidence": [EVIDENCE],
+                    },
+                    {
+                        "id": "a-honorific",
+                        "property_id": "honorific",
+                        "label": "称号",
+                        "value_type": "TEXT",
+                        "value": "令狐少侠",
+                        "confidence": 1.0,
+                        "evidence": [EVIDENCE],
+                    },
+                ],
+                "rows": [
+                    {"id": "f1", "type": "MASTER_OF", "source_id": "yue", "target_id": "linghu", "evidence": EVIDENCE},
+                    {"id": "f2", "type": "MEMBER_OF", "source_id": "linghu", "target_id": "huashan", "evidence": EVIDENCE},
+                ],
             }
         if entity_id == "yue":
             return {"entity": {"id": "yue", "project_id": project_id, "type": "Person", "name": "嶽不群", "aliases": ["岳不群"], "description": "华山派掌门。"}, "rows": []}
+        if entity_id == "huashan":
+            return {"entity": {"id": "huashan", "project_id": project_id, "type": "Sect", "name": "华山派", "aliases": [], "description": ""}, "rows": []}
         return None
 
 
@@ -118,3 +144,43 @@ def test_no_result_does_not_invent() -> None:
 
     assert answer.answer == "图谱中暂无足够事实"
     assert answer.evidence == []
+
+
+def test_attribute_answer_includes_value_and_evidence() -> None:
+    answer = QaService(FakeRepository()).ask("xiaoao", "令狐冲的性别是什么？")
+
+    assert answer.answer == "令狐沖的性别是男。"
+    assert answer.path == []
+    assert answer.evidence[0].id == "e1"
+
+
+def test_relation_synonyms_resolve_the_subject() -> None:
+    repository = FakeRepository()
+
+    for question in ("令狐冲隶属于什么门派？", "令狐冲属于哪个门派？"):
+        answer = QaService(repository).ask("xiaoao", question)
+        assert answer.answer == "令狐沖隶属于华山派。"
+        assert answer.path[0].relation == "MEMBER_OF"
+
+
+def test_llm_provider_is_only_used_for_unrecognized_questions() -> None:
+    class Provider:
+        def __init__(self):
+            self.calls = 0
+
+        def parse(self, question, catalog):
+            self.calls += 1
+            return QaIntent(
+                intent="ATTRIBUTE",
+                subject="令狐冲",
+                property="gender",
+            )
+
+    provider = Provider()
+    repository = FakeRepository()
+    local = QaService(repository, provider).ask("xiaoao", "令狐冲的性别是什么？")
+    fallback = QaService(repository, provider).ask("xiaoao", "请告诉我令狐冲是男的吗？")
+
+    assert provider.calls == 1
+    assert local.answer == "令狐沖的性别是男。"
+    assert fallback.answer == "令狐沖的性别是男。"

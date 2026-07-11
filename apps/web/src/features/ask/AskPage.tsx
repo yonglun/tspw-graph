@@ -3,7 +3,7 @@ import { FormEvent, useState } from 'react'
 import { apiFetch, type AskResponse } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
 
-const samples = ['令狐冲的师父是谁？', '令狐冲掌握什么武功？', '令狐冲属于哪个门派？', '令狐冲的生日是哪天？']
+const samples = ['令狐冲的师父是谁？', '令狐冲掌握什么武功？', '令狐冲属于哪个门派？', '令狐冲的性别是什么？', '令狐冲有哪些称号？', '令狐冲的生日是哪天？']
 
 export function AskPage() {
   const { projectId } = useProject()

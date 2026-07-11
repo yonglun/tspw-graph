@@ -16,19 +16,19 @@ RELATION_TEMPLATES = {
         relation="MASTER_OF",
         entity_role="target",
         explanation="查找以该人物为弟子的师承事实。",
-        cypher="MATCH (source:Entity)<-[:SOURCE]-(fact:Fact {project_id: $project_id, type: 'MASTER_OF'})-[:TARGET]->(target:Entity {id: $entity_id}) RETURN source, fact",
+        cypher="MATCH (source:Entity {project_id: $project_id})<-[:SOURCE]-(fact:Fact {project_id: $project_id, type: 'MASTER_OF'})-[:TARGET]->(target:Entity {project_id: $project_id, id: $entity_id}) WHERE coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED' RETURN source, fact",
     ),
     "martial_art": QueryTemplate(
         relation="KNOWS",
         entity_role="source",
         explanation="查找该人物作为主体的武学掌握事实。",
-        cypher="MATCH (source:Entity {id: $entity_id})<-[:SOURCE]-(fact:Fact {project_id: $project_id, type: 'KNOWS'})-[:TARGET]->(target:Entity) RETURN target, fact",
+        cypher="MATCH (source:Entity {project_id: $project_id, id: $entity_id})<-[:SOURCE]-(fact:Fact {project_id: $project_id, type: 'KNOWS'})-[:TARGET]->(target:Entity {project_id: $project_id}) WHERE coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED' RETURN target, fact",
     ),
     "organization": QueryTemplate(
         relation="MEMBER_OF",
         entity_role="source",
         explanation="查找该人物作为主体的组织隶属事实。",
-        cypher="MATCH (source:Entity {id: $entity_id})<-[:SOURCE]-(fact:Fact {project_id: $project_id, type: 'MEMBER_OF'})-[:TARGET]->(target:Entity) RETURN target, fact",
+        cypher="MATCH (source:Entity {project_id: $project_id, id: $entity_id})<-[:SOURCE]-(fact:Fact {project_id: $project_id, type: 'MEMBER_OF'})-[:TARGET]->(target:Entity {project_id: $project_id}) WHERE coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED' RETURN target, fact",
     ),
 }
 

@@ -61,6 +61,7 @@ class QaService:
         if template_key is None:
             return self._empty(project_id)
         template = RELATION_TEMPLATES[template_key]
+        related_matches: dict[str, dict[str, Any]] = {}
         for row in detail["rows"]:
             if row.get("review_status") == "REJECTED":
                 continue
@@ -75,39 +76,57 @@ class QaService:
                 if template.entity_role == "target"
                 else row["target_id"]
             )
-            related = self.repository.entity_detail(project_id, related_id)
-            if related is None:
-                continue
-            related_entity = related["entity"]
+            related_entity = row.get(
+                "source" if template.entity_role == "target" else "target"
+            )
+            if not related_entity or not related_entity.get("name"):
+                related = self.repository.entity_detail(project_id, related_id)
+                if related is None:
+                    continue
+                related_entity = related["entity"]
+            match = related_matches.setdefault(
+                related_id,
+                {"entity": related_entity, "evidence": []},
+            )
             evidence = row.get("evidence")
-            evidence_rows = (
-                [EvidenceDetail.model_validate(evidence)]
-                if evidence and evidence.get("id")
-                else []
+            if evidence and evidence.get("id"):
+                match["evidence"].append(EvidenceDetail.model_validate(evidence))
+        if not related_matches:
+            return self._empty(project_id)
+
+        matches = list(related_matches.values())
+        related_names = [match["entity"]["name"] for match in matches]
+        path = [
+            QaPathStep(
+                source_name=(
+                    match["entity"]["name"]
+                    if template.entity_role == "target"
+                    else entity["name"]
+                ),
+                relation=template.relation,
+                target_name=(
+                    entity["name"]
+                    if template.entity_role == "target"
+                    else match["entity"]["name"]
+                ),
             )
-            return AskResponse(
-                answer=self._answer(template_key, entity["name"], related_entity["name"]),
-                path=[
-                    QaPathStep(
-                        source_name=(
-                            related_entity["name"]
-                            if template.entity_role == "target"
-                            else entity["name"]
-                        ),
-                        relation=template.relation,
-                        target_name=(
-                            entity["name"]
-                            if template.entity_role == "target"
-                            else related_entity["name"]
-                        ),
-                    )
-                ],
-                query_explanation=template.explanation,
-                cypher_template=template.cypher,
-                parameters={"project_id": project_id, "entity_id": entity["id"]},
-                evidence=evidence_rows,
-            )
-        return self._empty(project_id)
+            for match in matches
+        ]
+        evidence = list(
+            {
+                item.id: item
+                for match in matches
+                for item in match["evidence"]
+            }.values()
+        )
+        return AskResponse(
+            answer=self._answer_many(template_key, entity["name"], related_names),
+            path=path,
+            query_explanation=template.explanation,
+            cypher_template=template.cypher,
+            parameters={"project_id": project_id, "entity_id": entity["id"]},
+            evidence=evidence,
+        )
 
     def _attribute_answer(
         self,
@@ -165,6 +184,14 @@ class QaService:
         if intent == "martial_art":
             return f"{entity_name}掌握{related_name}。"
         return f"{entity_name}隶属于{related_name}。"
+
+    def _answer_many(self, intent: str, entity_name: str, related_names: list[str]) -> str:
+        names = "、".join(dict.fromkeys(related_names))
+        if intent == "master":
+            return f"{entity_name}的师父是{names}。"
+        if intent == "martial_art":
+            return f"{entity_name}掌握{names}。"
+        return f"{entity_name}隶属于{names}。"
 
     def _resolve_subject(
         self, matches: list[dict[str, Any]], subject: str

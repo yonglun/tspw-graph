@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     sqlite_url: str = "sqlite:///./tspw-graph.db"
     data_root: Path = Path("./data/uploads")
     max_upload_bytes: int = 20 * 1024 * 1024
+    qa_model_profile_id: str = "azure:gpt-4o-mini"
     model_profiles: list[ModelProfileSettings] = Field(
         default_factory=lambda: [
             ModelProfileSettings(

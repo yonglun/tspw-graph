@@ -114,9 +114,11 @@ class GraphService:
         result = self.repository.relation_detail(project_id, relation_id)
         if result is None:
             raise EntityNotFoundError(relation_id)
+        relation = relation_by_id(result.get("type", ""))
         return RelatedFact.model_validate(
             {
                 **result,
+                "label": relation.label if relation else result.get("type", ""),
                 "evidence": self._deduplicate_evidence(result.get("evidence", [])),
             }
         )

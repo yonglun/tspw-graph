@@ -5,6 +5,7 @@ import {
   type ReviewAction,
   type ReviewActionRequest,
   type ReviewItem,
+  type RelationEvidence,
   type ReviewSummary as Summary,
 } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
@@ -32,10 +33,28 @@ export function ReviewPage() {
   const [items, setItems] = useState<ReviewItem[]>([])
   const [actions, setActions] = useState<ReviewAction[]>([])
   const [selectedId, setSelectedId] = useState<string>()
+  const [selectedFact, setSelectedFact] = useState<RelationEvidence>()
+  const [factLoading, setFactLoading] = useState(false)
+  const [factError, setFactError] = useState('')
   const selected = useMemo(
     () => items.find((item) => item.id === selectedId) ?? items[0],
     [items, selectedId],
   )
+
+  useEffect(() => {
+    setSelectedFact(undefined)
+    setFactError('')
+    if (!selected || selected.item_type !== 'FACT' || !selected.target.fact_id) return
+    let active = true
+    setFactLoading(true)
+    apiFetch<RelationEvidence>(
+      `/api/graph/relations/${encodeURIComponent(selected.target.fact_id)}?project_id=${projectId}`,
+    )
+      .then((fact) => { if (active) setSelectedFact(fact) })
+      .catch((error: Error) => { if (active) setFactError(error.message) })
+      .finally(() => { if (active) setFactLoading(false) })
+    return () => { active = false }
+  }, [projectId, selected])
 
   const refreshReview = useCallback(() => {
     apiFetch<Summary>(`/api/projects/${projectId}/review/summary`).then(setSummary)
@@ -58,6 +77,7 @@ export function ReviewPage() {
       body: JSON.stringify(request),
     }).then(() => {
       setItems((current) => current.filter((item) => item.id !== selected.id))
+      setSelectedFact(undefined)
       refreshReview()
     })
   }
@@ -72,7 +92,7 @@ export function ReviewPage() {
       <EntityMergePanel projectId={projectId} onMerged={refreshReview} />
       <div className="review-workspace">
         <ReviewQueue items={items} selectedId={selected?.id} onSelect={(item) => setSelectedId(item.id)} />
-        <ReviewDetail item={selected} onAction={applyAction} />
+        <ReviewDetail item={selected} fact={selectedFact} factLoading={factLoading} factError={factError} onAction={applyAction} />
         <AuditDrawer actions={actions} />
       </div>
     </section>

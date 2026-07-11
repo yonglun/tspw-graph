@@ -142,4 +142,22 @@ describe('ReviewPage', () => {
       ),
     )
   })
+
+  it('shows the human-readable fact triple and source evidence', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/summary')) return json({ open_review_items: 1, accepted_facts: 0, rejected_facts: 0, pending_facts: 1, merged_entities: 0, split_aliases: 0, evidence_coverage: 0, review_completion_rate: 0, graph_fact_delta_before_after_review: 0 })
+      if (url.includes('/review/items?')) return json({ items: [{ id: 'review-fact', item_type: 'FACT', status: 'OPEN', reason_code: 'LOW_CONFIDENCE_FACT', target: { fact_id: 'fact-master' }, evidence_ids: ['ev-1'], severity: 40, source: 'rule' }] })
+      if (url.includes('/api/graph/relations/fact-master')) return json({ id: 'fact-master', type: 'MASTER_OF', label: '师父', source_id: 'yue', target_id: 'linghu', source: { id: 'yue', project_id: 'xiaoao', type: 'Person', name: '岳不群', aliases: [], description: '' }, target: { id: 'linghu', project_id: 'xiaoao', type: 'Person', name: '令狐冲', aliases: [], description: '' }, evidence: [{ id: 'ev-1', chapter_id: 'c1', chapter_number: 1, chapter_title: '第一章', start_offset: 10, end_offset: 20, quote: '岳不群传授令狐冲剑法' }] })
+      if (url.includes('/audit')) return json({ actions: [] })
+      return json({})
+    })
+    renderPage()
+
+    expect(await screen.findByText('岳不群')).toBeVisible()
+    expect(screen.getByText('师父')).toBeVisible()
+    expect(screen.getByText('令狐冲')).toBeVisible()
+    expect(screen.getByText('岳不群传授令狐冲剑法')).toBeVisible()
+    expect(screen.getAllByText('低置信度事实').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/模型对这条关系/)).toBeVisible()
+  })
 })

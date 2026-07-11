@@ -212,6 +212,8 @@ def test_relation_detail_returns_relation_evidence() -> None:
                 "type": "MASTER_OF",
                 "source_id": "yue",
                 "target_id": "linghu",
+                "source": {"id": "yue", "project_id": project_id, "type": "Person", "name": "岳不群", "aliases": [], "description": ""},
+                "target": {"id": "linghu", "project_id": project_id, "type": "Person", "name": "令狐冲", "aliases": [], "description": ""},
                 "review_status": "ACCEPTED",
                 "evidence": [
                     {
@@ -230,6 +232,9 @@ def test_relation_detail_returns_relation_evidence() -> None:
 
     assert relation.id == "fact-master"
     assert relation.type == "MASTER_OF"
+    assert relation.label == "师父"
+    assert relation.source is not None and relation.source.name == "岳不群"
+    assert relation.target is not None and relation.target.name == "令狐冲"
     assert relation.evidence[0].quote == "岳不群传授令狐冲"
 
 

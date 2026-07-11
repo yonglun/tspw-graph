@@ -391,3 +391,32 @@ def test_entity_detail_query_aggregates_attributes_and_facts_separately() -> Non
     assert session.statement.count("CALL {") == 2
     assert "HAS_ATTRIBUTE" in session.statement
     assert "(fact:Fact)-[:SOURCE|TARGET]->(entity)" in session.statement
+
+
+def test_relation_detail_query_aggregates_evidence_before_returning_relation() -> None:
+    relation = {
+        "id": "fact-master",
+        "type": "MASTER_OF",
+        "source_id": "yue",
+        "target_id": "linghu",
+        "review_status": "ACCEPTED",
+        "evidence": [
+            {
+                "id": "ev-1",
+                "chapter_id": "chapter-1",
+                "chapter_number": 1,
+                "chapter_title": "第一章",
+                "start_offset": 1,
+                "end_offset": 4,
+                "quote": "传剑",
+            }
+        ],
+    }
+    session = FakeSession({"relation": relation})
+    repository = Neo4jGraphRepository(FakeDriver(session))
+
+    result = repository.relation_detail("p-1", "fact-master")
+
+    assert result == relation
+    assert "WITH fact, source, target, collect(DISTINCT" in session.statement
+    assert "evidence: [item IN evidence_rows WHERE item.id IS NOT NULL]" in session.statement

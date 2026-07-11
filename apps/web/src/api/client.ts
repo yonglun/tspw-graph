@@ -27,7 +27,12 @@ export type Fact = {
   evidence: Evidence[]
 }
 
-export type RelationEvidence = Fact & { review_status?: string }
+export type RelationEvidence = Fact & {
+  label?: string
+  review_status?: string
+  source?: EntitySummary
+  target?: EntitySummary
+}
 
 export type AttributeDetail = {
   id: string

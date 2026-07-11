@@ -143,8 +143,11 @@ class EvidenceDetail(BaseModel):
 class RelatedFact(BaseModel):
     id: str
     type: str
+    label: str | None = None
     source_id: str
     target_id: str
+    source: EntitySummary | None = None
+    target: EntitySummary | None = None
     review_status: str | None = None
     evidence: list[EvidenceDetail] = Field(default_factory=list)
 

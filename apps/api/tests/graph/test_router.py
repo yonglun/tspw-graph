@@ -140,6 +140,8 @@ def test_relation_detail_serializes_evidence() -> None:
                 "type": "MASTER_OF",
                 "source_id": "yue",
                 "target_id": "linghu",
+                "source": {"id": "yue", "project_id": project_id, "type": "Person", "name": "岳不群", "aliases": [], "description": ""},
+                "target": {"id": "linghu", "project_id": project_id, "type": "Person", "name": "令狐冲", "aliases": [], "description": ""},
                 "review_status": "ACCEPTED",
                 "evidence": [
                     {
@@ -164,6 +166,8 @@ def test_relation_detail_serializes_evidence() -> None:
 
     assert response.status_code == 200
     assert response.json()["evidence"][0]["quote"] == "岳不群传授令狐冲"
+    assert response.json()["label"] == "师父"
+    assert response.json()["source"]["name"] == "岳不群"
 
 
 def test_relation_detail_returns_not_found_for_missing_relation() -> None:

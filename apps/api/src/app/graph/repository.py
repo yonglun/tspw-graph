@@ -320,6 +320,8 @@ class Neo4jGraphRepository:
                 type: fact.type,
                 source_id: source.id,
                 target_id: target.id,
+                source: properties(source),
+                target: properties(target),
                 review_status: fact.review_status,
                 evidence: [item IN evidence_rows WHERE item.id IS NOT NULL]
             } AS relation

@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from app.qa.intents import parse_local_intent
+
 
 @dataclass(frozen=True)
 class QueryTemplate:
@@ -32,22 +34,18 @@ RELATION_TEMPLATES = {
 
 
 def classify(question: str) -> str | None:
-    if "师父" in question or "師父" in question:
-        return "master"
-    if "武功" in question or "武学" in question or "掌握" in question:
-        return "martial_art"
-    if "门派" in question or "門派" in question or "属于" in question:
-        return "organization"
-    if question.rstrip("？?").endswith("是谁"):
-        return "introduction"
-    return None
+    intent = parse_local_intent(question)
+    if intent is None:
+        return None
+    return {
+        "MASTER_OF": "master",
+        "KNOWS": "martial_art",
+        "MEMBER_OF": "organization",
+    }.get(intent.relation or "", "introduction" if intent.intent == "INTRODUCTION" else None)
 
 
 def subject_text(question: str) -> str:
-    text = question.strip().rstrip("？?")
-    if "的" in text:
-        return text.split("的", 1)[0]
-    if text.endswith("是谁"):
-        return text[: -len("是谁")]
-    return text
-
+    intent = parse_local_intent(question)
+    if intent is not None:
+        return intent.subject
+    return question.strip().rstrip("？?")

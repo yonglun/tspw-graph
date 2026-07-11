@@ -306,22 +306,22 @@ class Neo4jGraphRepository:
               AND coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
             OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence)
                 -[:IN_CHAPTER]->(chapter:Chapter)
-            WITH fact, source, target, evidence, chapter
+            WITH fact, source, target, collect(DISTINCT {
+                id: evidence.id,
+                chapter_id: chapter.id,
+                chapter_number: chapter.number,
+                chapter_title: chapter.title,
+                start_offset: evidence.start_offset,
+                end_offset: evidence.end_offset,
+                quote: evidence.quote
+            }) AS evidence_rows
             RETURN {
                 id: fact.id,
                 type: fact.type,
                 source_id: source.id,
                 target_id: target.id,
                 review_status: fact.review_status,
-                evidence: collect(DISTINCT {
-                    id: evidence.id,
-                    chapter_id: chapter.id,
-                    chapter_number: chapter.number,
-                    chapter_title: chapter.title,
-                    start_offset: evidence.start_offset,
-                    end_offset: evidence.end_offset,
-                    quote: evidence.quote
-                })
+                evidence: [item IN evidence_rows WHERE item.id IS NOT NULL]
             } AS relation
         """
         with self.driver.session() as session:

@@ -57,3 +57,32 @@ def test_session_expires_after_eight_idle_hours(setup_service):
     clock.advance(timedelta(hours=8, seconds=1))
     with pytest.raises(AuthError, match="AUTHENTICATION_REQUIRED"):
         service.authenticate(login.session_token)
+
+
+def ready_context(service: AuthService):
+    service.bootstrap_default_admin()
+    login = service.login("admin", "Pass@word1", "127.0.0.1", "pytest")
+    context = service.authenticate(login.session_token)
+    service.change_password(context, "Pass@word1", "Better@Pass2")
+    return service.authenticate(login.session_token)
+
+
+def test_cannot_disable_self_and_can_disable_another_admin(setup_service):
+    service, repository, _ = setup_service
+    context = ready_context(service)
+    with pytest.raises(AuthError, match="CANNOT_DISABLE_SELF"):
+        service.disable_admin(context, context.admin.id, "127.0.0.1")
+    second = service.create_admin(context, "second", "Second@Pass2", "127.0.0.1")
+    service.disable_admin(context, second.id, "127.0.0.1")
+    assert repository.get_admin(second.id).enabled is False
+
+
+def test_reset_password_revokes_sessions_and_forces_change(setup_service):
+    service, repository, _ = setup_service
+    context = ready_context(service)
+    target = service.create_admin(context, "second", "Second@Pass2", "127.0.0.1")
+    target_login = service.login("second", "Second@Pass2", "127.0.0.2", "pytest")
+    service.reset_password(context, target.id, "Temporary@3", "127.0.0.1")
+    with pytest.raises(AuthError, match="AUTHENTICATION_REQUIRED"):
+        service.authenticate(target_login.session_token)
+    assert repository.get_admin(target.id).must_change_password is True

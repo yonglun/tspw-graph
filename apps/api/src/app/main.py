@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from neo4j import GraphDatabase
 
 from app.auth.dependencies import build_auth_service
+from app.auth.admin_router import router as admin_router
 from app.auth.router import router as auth_router
 
 from app.graph.router import router as graph_router
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="江湖图谱 API", lifespan=lifespan)
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(ontology_router)
 app.include_router(graph_router)
 app.include_router(qa_router)

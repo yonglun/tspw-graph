@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from app.settings import Settings
 
 from .repository import AuthRepository, normalize_username
-from .schemas import AdminSummary, AuthContext, SessionResponse
+from .schemas import AdminSummary, AuditEventResponse, AuditPage, AuthContext, SessionResponse
 from .security import PasswordPolicy, PasswordSecurity, csrf_matches, hash_session_token, new_token
 
 
@@ -121,6 +121,100 @@ class AuthService:
         self.repository.revoke_admin_sessions(account.id, except_session_id=context.session.id)
         self.repository.add_audit_event(actor=account, target=account, action="PASSWORD_CHANGE", result="SUCCESS", ip_address=ip_address, metadata={})
         return self._response(account, context.session.csrf_token)
+
+    def list_admins(self, actor: AuthContext) -> list[AdminSummary]:
+        return [AdminSummary.from_account(account) for account in self.repository.list_admins()]
+
+    def create_admin(self, actor: AuthContext, username: str, temporary_password: str, ip_address: str | None) -> AdminSummary:
+        self._validate_username(username)
+        self._validate_password(temporary_password)
+        if self.repository.find_admin_by_username(username):
+            raise AuthError("USERNAME_ALREADY_EXISTS", status_code=409)
+        account = self.repository.create_admin(username, self.password_security.hash(temporary_password), must_change_password=True)
+        self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_CREATED", result="SUCCESS", ip_address=ip_address, metadata={})
+        return AdminSummary.from_account(account)
+
+    def rename_admin(self, actor: AuthContext, admin_id: str, username: str, ip_address: str | None) -> AdminSummary:
+        self._validate_username(username)
+        account = self._admin_or_error(admin_id)
+        duplicate = self.repository.find_admin_by_username(username)
+        if duplicate and duplicate.id != account.id:
+            raise AuthError("USERNAME_ALREADY_EXISTS", status_code=409)
+        old_username = account.username
+        account = self.repository.update_admin(admin_id, username=username.strip(), normalized_username=normalize_username(username))
+        self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_RENAMED", result="SUCCESS", ip_address=ip_address, metadata={"old_username": old_username, "new_username": account.username})
+        return AdminSummary.from_account(account)
+
+    def enable_admin(self, actor: AuthContext, admin_id: str, ip_address: str | None) -> AdminSummary:
+        account = self._admin_or_error(admin_id)
+        account = self.repository.update_admin(account.id, enabled=True)
+        self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_ENABLED", result="SUCCESS", ip_address=ip_address, metadata={})
+        return AdminSummary.from_account(account)
+
+    def disable_admin(self, actor: AuthContext, admin_id: str, ip_address: str | None) -> AdminSummary:
+        account = self._admin_or_error(admin_id)
+        if account.id == actor.admin.id:
+            self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_DISABLED", result="REJECTED", ip_address=ip_address, metadata={"reason": "SELF"})
+            raise AuthError("CANNOT_DISABLE_SELF", status_code=409)
+        if account.enabled and self.repository.enabled_admin_count() <= 1:
+            raise AuthError("LAST_ACTIVE_ADMIN", status_code=409)
+        account = self.repository.update_admin(account.id, enabled=False)
+        self.repository.revoke_admin_sessions(account.id)
+        self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_DISABLED", result="SUCCESS", ip_address=ip_address, metadata={})
+        return AdminSummary.from_account(account)
+
+    def reset_password(self, actor: AuthContext, admin_id: str, temporary_password: str, ip_address: str | None) -> AdminSummary:
+        self._validate_password(temporary_password)
+        account = self._admin_or_error(admin_id)
+        account = self.repository.update_admin(account.id, password_hash=self.password_security.hash(temporary_password), must_change_password=True)
+        self.repository.revoke_admin_sessions(account.id)
+        self.repository.add_audit_event(actor=actor.admin, target=account, action="PASSWORD_RESET", result="SUCCESS", ip_address=ip_address, metadata={})
+        return AdminSummary.from_account(account)
+
+    def list_audit_events(self, actor: AuthContext, limit: int = 100, cursor: str | None = None) -> AuditPage:
+        events = self.repository.list_audit_events(limit=min(max(limit, 1), 200))
+        return AuditPage(items=[AuditEventResponse(
+            id=event.id,
+            actor_username=event.actor_username,
+            target_username=event.target_username,
+            action=event.action,
+            result=event.result,
+            ip_address=event.ip_address,
+            metadata=event.event_metadata,
+            created_at=event.created_at,
+        ) for event in events])
+
+    def recover_existing_admin(self, username: str, temporary_password: str) -> None:
+        self._validate_password(temporary_password)
+        account = self.repository.find_admin_by_username(username)
+        if account is None:
+            raise AuthError("ADMIN_NOT_FOUND", status_code=404)
+        account = self.repository.update_admin(
+            account.id,
+            password_hash=self.password_security.hash(temporary_password),
+            must_change_password=True,
+            enabled=True,
+        )
+        self.repository.revoke_admin_sessions(account.id)
+        self.repository.add_audit_event(actor=None, target=account, action="SYSTEM_RECOVERY", result="SUCCESS", ip_address=None, metadata={})
+
+    def _admin_or_error(self, admin_id: str):
+        account = self.repository.get_admin(admin_id)
+        if account is None:
+            raise AuthError("ADMIN_NOT_FOUND", status_code=404)
+        return account
+
+    @staticmethod
+    def _validate_username(username: str) -> None:
+        cleaned = username.strip()
+        if not 3 <= len(cleaned) <= 64:
+            raise AuthError("USERNAME_INVALID", status_code=422)
+
+    @staticmethod
+    def _validate_password(password: str) -> None:
+        failures = PasswordPolicy.validate(password)
+        if failures:
+            raise AuthError("PASSWORD_POLICY_VIOLATION", status_code=422, details={"violations": failures})
 
     @staticmethod
     def _response(admin, csrf_token: str) -> SessionResponse:

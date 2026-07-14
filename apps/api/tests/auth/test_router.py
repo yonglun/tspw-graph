@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 
 from app.auth.dependencies import get_auth_service
 from app.auth.repository import AuthRepository
+from app.auth.admin_router import router as admin_router
 from app.auth.router import router
 from app.auth.service import AuthService
 from app.settings import Settings
@@ -17,6 +18,7 @@ def make_client(tmp_path: Path) -> TestClient:
     service.bootstrap_default_admin()
     app = FastAPI()
     app.include_router(router)
+    app.include_router(admin_router)
     app.dependency_overrides[get_auth_service] = lambda: service
     return TestClient(app)
 
@@ -43,3 +45,19 @@ def test_change_password_requires_matching_csrf(tmp_path):
     )
     assert changed.status_code == 200
     assert changed.json()["must_change_password"] is False
+
+
+def test_admin_management_and_audit_never_expose_password(tmp_path):
+    client = make_client(tmp_path)
+    login = client.post("/api/auth/login", json={"username": "admin", "password": "Pass@word1"})
+    csrf = login.json()["csrf_token"]
+    client.post("/api/auth/change-password", headers={"X-CSRF-Token": csrf}, json={"current_password": "Pass@word1", "new_password": "Better@Pass2"})
+    created = client.post("/api/admins", headers={"X-CSRF-Token": csrf}, json={"username": "second", "temporary_password": "Second@Pass2"})
+    assert created.status_code == 201
+    assert "Second@Pass2" not in created.text
+    assert "password_hash" not in created.text
+    admins = client.get("/api/admins")
+    assert [item["username"] for item in admins.json()] == ["admin", "second"]
+    audit = client.get("/api/admin-audit-events")
+    assert audit.status_code == 200
+    assert "Second@Pass2" not in audit.text

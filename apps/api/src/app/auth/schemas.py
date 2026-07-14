@@ -48,3 +48,32 @@ class LoginRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=1024)
     new_password: str = Field(min_length=1, max_length=1024)
+
+
+class AdminCreateRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    temporary_password: str = Field(min_length=1, max_length=1024)
+
+
+class AdminUpdateRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+
+
+class AdminResetPasswordRequest(BaseModel):
+    temporary_password: str = Field(min_length=1, max_length=1024)
+
+
+class AuditEventResponse(BaseModel):
+    id: str
+    actor_username: str | None
+    target_username: str | None
+    action: str
+    result: str
+    ip_address: str | None
+    metadata: dict[str, object]
+    created_at: datetime
+
+
+class AuditPage(BaseModel):
+    items: list[AuditEventResponse]
+    next_cursor: str | None = None

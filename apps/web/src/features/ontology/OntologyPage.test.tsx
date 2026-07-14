@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -25,6 +25,8 @@ describe('OntologyPage', () => {
 
     await user.click(await screen.findByRole('button', { name: /人物/ }))
 
+    const personCard = screen.getByRole('article', { name: /人物/ })
+    expect(within(personCard).getByTestId('entity-type-dot')).toBeVisible()
     expect(screen.getByText('性别')).toBeVisible()
     expect(screen.getByText('人物性别')).toBeVisible()
     expect(screen.getByText(/男、女/)).toBeVisible()

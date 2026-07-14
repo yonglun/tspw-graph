@@ -20,13 +20,11 @@ export function GuidePage() {
       <article className="lesson" aria-live="polite"><p className="eyebrow">{current.label}</p><h2>{current.title}</h2><p>{current.body}</p></article>
       {step < steps.length - 1 ? <button className="primary" onClick={() => setStep(step + 1)}>{step === 0 ? '下一步：什么是本体' : '继续导览'} <span aria-hidden="true">→</span></button> : <Link className="button primary" to="/graph">开始探索图谱 →</Link>}
     </div>
-    <div className="triple-stage" aria-label="知识三元组示意图">
-      <div className="seal">知</div>
+    <div className="triple-card" role="group" aria-label="知识三元组示例">
       <div className="triple-node subject"><small>人物</small><strong>令狐冲</strong></div>
-      <div className="relation"><span>掌握</span><i /></div>
+      <div className="relation"><span>掌握</span><i aria-hidden="true" /></div>
       <div className="triple-node object"><small>剑法</small><strong>独孤九剑</strong></div>
-      <p>主体 <b>— 关系 →</b> 客体</p>
+      <p>主体 — 关系 — 客体，构成一条可查询事实。</p>
     </div>
   </section>
 }
-

@@ -130,7 +130,11 @@ class AuthRepository:
                 AdminLoginThrottle.ip_address == ip_address,
             ))
             if throttle is None:
-                throttle = AdminLoginThrottle(normalized_username=normalized_username, ip_address=ip_address)
+                throttle = AdminLoginThrottle(
+                    normalized_username=normalized_username,
+                    ip_address=ip_address,
+                    failure_count=0,
+                )
                 session.add(throttle)
             if throttle.locked_until and _aware(throttle.locked_until) <= now:
                 throttle.failure_count = 0

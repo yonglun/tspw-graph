@@ -32,4 +32,23 @@ describe('OntologyPage', () => {
     expect(screen.getByText(/男、女/)).toBeVisible()
     expect(screen.getByRole('button', { name: /收起属性/ })).toHaveAttribute('aria-expanded', 'true')
   })
+
+  it('presents the ABox example as a structured instance relationship', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      entity_types: [],
+      relation_types: [],
+      example: { subject: '令狐冲', predicate: 'KNOWS', object: '独孤九剑' },
+    }))))
+    const user = userEvent.setup()
+    render(<OntologyPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'ABox 实例层' }))
+
+    const example = screen.getByRole('figure', { name: 'ABox 实例关系示例' })
+    expect(within(example).getByRole('group', { name: '主体实例' })).toHaveTextContent('令狐冲')
+    expect(within(example).getByRole('group', { name: '关系类型' })).toHaveTextContent('KNOWS')
+    expect(within(example).getByRole('group', { name: '客体实例' })).toHaveTextContent('独孤九剑')
+    expect(within(example).getByText('通过约束检查')).toBeVisible()
+    expect(within(example).getByText(/主体必须是人物/)).toBeVisible()
+  })
 })

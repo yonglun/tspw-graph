@@ -58,11 +58,37 @@ export function OntologyPage() {
         </article>
       })}
     </div>}
-    {catalog && view === 'abox' && <div className="abox">
-      <div className="abox-node">令狐冲 <small>Person</small></div>
-      <div className="abox-edge">— 掌握 →</div>
-      <div className="abox-node accent">独孤九剑 <small>Swordplay</small></div>
-      <aside><b>满足本体约束</b><p>KNOWS 的主体必须是人物，客体必须是武学。</p><code>{JSON.stringify(catalog.example, null, 2)}</code></aside>
-    </div>}
+    {catalog && view === 'abox' && <figure className="abox" aria-label="ABox 实例关系示例">
+      <div className="abox-flow">
+        <div className="abox-node" role="group" aria-label="主体实例">
+          <span>人物实例</span>
+          <h2>{catalog.example.subject}</h2>
+          <code>Person</code>
+        </div>
+        <div className="abox-edge" role="group" aria-label="关系类型">
+          <span>关系类型</span>
+          <strong>掌握</strong>
+          <code>{catalog.example.predicate}</code>
+          <i className="abox-arrow" aria-hidden="true" />
+        </div>
+        <div className="abox-node" role="group" aria-label="客体实例">
+          <span>武学实例</span>
+          <h2>{catalog.example.object}</h2>
+          <code>Swordplay</code>
+        </div>
+      </div>
+      <aside className="abox-rule-card">
+        <div>
+          <p className="abox-rule-status"><i aria-hidden="true" />通过约束检查</p>
+          <h3>这条事实为什么有效？</h3>
+          <p>{catalog.example.predicate} 的主体必须是人物，客体必须是武学。</p>
+        </div>
+        <details>
+          <summary>查看原始三元组</summary>
+          <pre><code>{JSON.stringify(catalog.example, null, 2)}</code></pre>
+        </details>
+      </aside>
+      <figcaption>ABox 用本体定义的类型与关系，描述具体人物、武学和事实。</figcaption>
+    </figure>}
   </section>
 }

@@ -532,27 +532,169 @@ select:focus-visible {
 }
 
 .abox {
-  min-height: 400px;
+  display: grid;
+  gap: 32px;
+  min-height: 440px;
+  margin: 0;
+  padding: 32px;
   border: 0;
   border-radius: var(--ds-radius-card);
   background: var(--ds-background-elevated);
-  box-shadow: var(--ds-shadow-small);
+  box-shadow: var(--ds-shadow-medium);
+}
+
+.abox-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(144px, .48fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
 }
 
 .abox-node {
+  display: flex;
+  min-width: 0;
+  min-height: 156px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px;
   border: 0;
-  border-radius: var(--ds-radius);
-  box-shadow: var(--ds-shadow-border);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-background-primary);
+  box-shadow: var(--ds-shadow-small);
   font-family: inherit;
-  font-size: 16px;
+}
+
+.abox-node span,
+.abox-edge > span {
+  color: var(--ds-text-muted);
+  font-size: 12px;
+}
+
+.abox-node h2 {
+  margin: 16px 0 6px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -.72px;
+  overflow-wrap: anywhere;
+}
+
+.abox-node code,
+.abox-edge code {
+  color: var(--ds-text-secondary);
+  font-family: Geist Mono, ui-monospace, monospace;
+  font-size: 12px;
   font-weight: 500;
 }
 
-.abox aside {
+.abox-edge {
+  position: relative;
+  display: flex;
+  min-height: 156px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.abox-edge strong {
+  margin: 10px 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.abox-arrow {
+  position: absolute;
+  top: 50%;
+  right: -20px;
+  left: -20px;
+  height: 1px;
+  background: var(--ds-text-muted);
+}
+
+.abox-arrow::after {
+  content: "→";
+  position: absolute;
+  top: -12px;
+  right: -2px;
+  padding-left: 8px;
+  background: var(--ds-background-elevated);
+  color: var(--ds-text-secondary);
+  font-size: 18px;
+}
+
+.abox-rule-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 32px;
+  padding: 24px;
   border: 0;
-  border-radius: var(--ds-radius);
+  border-radius: var(--ds-radius-card);
   background: var(--ds-background-primary);
   box-shadow: var(--ds-shadow-border);
+}
+
+.abox-rule-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.abox-rule-status i {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: #45a557;
+}
+
+.abox-rule-card h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -.36px;
+}
+
+.abox-rule-card p:last-child,
+.abox figcaption {
+  margin: 0;
+  color: var(--ds-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.abox-rule-card details {
+  min-width: 220px;
+}
+
+.abox-rule-card summary {
+  color: var(--ds-interactive);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.abox-rule-card pre {
+  max-width: 320px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: var(--ds-radius);
+  background: var(--ds-background-elevated);
+  box-shadow: var(--ds-shadow-border);
+  white-space: pre-wrap;
+}
+
+.abox-rule-card pre code {
+  font-family: Geist Mono, ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.abox figcaption {
+  text-align: center;
 }
 
 /* Story line */
@@ -671,6 +813,50 @@ select:focus-visible {
   .relation span {
     display: inline-block;
     transform: rotate(-90deg);
+  }
+
+  .abox {
+    gap: 24px;
+    padding: 20px;
+  }
+
+  .abox-flow,
+  .abox-rule-card {
+    grid-template-columns: 1fr;
+  }
+
+  .abox-flow {
+    gap: 20px;
+  }
+
+  .abox-edge {
+    min-height: 96px;
+  }
+
+  .abox-arrow {
+    top: -16px;
+    right: 50%;
+    bottom: -16px;
+    left: auto;
+    width: 1px;
+    height: auto;
+  }
+
+  .abox-arrow::after {
+    content: "↓";
+    top: auto;
+    right: -9px;
+    bottom: -2px;
+    padding: 8px 0 0;
+  }
+
+  .abox-rule-card {
+    align-items: start;
+    gap: 20px;
+  }
+
+  .abox-rule-card details {
+    min-width: 0;
   }
 
   .timeline li {

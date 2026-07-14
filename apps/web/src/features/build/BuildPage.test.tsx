@@ -26,6 +26,7 @@ it('uploads a novel and shows the persistent job stage', async () => {
   await user.click(screen.getByRole('button', { name: '开始构建' }))
   await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/projects/upload'))).toBe(true))
   expect(await screen.findByText('等待 Worker')).toBeVisible()
+  expect(screen.getByRole('status', { name: 'QUEUED' })).toBeVisible()
 })
 
 it('restores a build job from URL state after refresh', async () => {

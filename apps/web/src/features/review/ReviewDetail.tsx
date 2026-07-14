@@ -1,4 +1,5 @@
 import type { ReviewActionRequest, ReviewItem, RelationEvidence } from '../../api/client'
+import { StatusDot } from '../../components/StatusDot'
 
 export function ReviewDetail({
   item,
@@ -24,7 +25,7 @@ export function ReviewDetail({
   const evidence = fact?.evidence ?? []
 
   return <section className="review-detail">
-    <div className="review-detail-heading"><div><p className="eyebrow">{item.item_type === 'FACT' ? 'FACT TO REVIEW' : item.item_type}</p><h2>需要审核的内容</h2></div><span className="severity-badge">严重度 {item.severity}</span></div>
+    <div className="review-detail-heading"><div><p className="eyebrow">{item.item_type === 'FACT' ? 'FACT TO REVIEW' : item.item_type}</p><h2>需要审核的内容</h2></div><StatusDot label={`严重度 ${item.severity}`} tone={item.severity >= 70 ? 'error' : item.severity >= 40 ? 'warning' : 'info'}>严重度 {item.severity}</StatusDot></div>
     <div className="review-reason"><b>{reasonLabel(item.reason_code)}</b><span>{item.source === 'manual' ? '人工提交' : item.source === 'model' ? '模型发现' : '规则发现'}</span><p>{reasonDescription(item.reason_code)}</p></div>
     {item.item_type === 'FACT' ? <>
       {factLoading && <p className="review-loading" role="status">正在加载事实和原文证据…</p>}

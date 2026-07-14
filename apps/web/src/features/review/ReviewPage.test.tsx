@@ -159,5 +159,6 @@ describe('ReviewPage', () => {
     expect(screen.getByText('岳不群传授令狐冲剑法')).toBeVisible()
     expect(screen.getAllByText('低置信度事实').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText(/模型对这条关系/)).toBeVisible()
+    expect(screen.getByRole('status', { name: '严重度 40' })).toBeVisible()
   })
 })

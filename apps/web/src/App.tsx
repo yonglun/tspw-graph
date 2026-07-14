@@ -3,7 +3,7 @@ import { BrowserRouter, NavLink } from 'react-router-dom'
 import { AppRoutes } from './app/router'
 import { ProjectProvider, useProject } from './app/ProjectContext'
 import { ProjectSwitcher } from './features/projects/ProjectSwitcher'
-import './styles/theme.css'
+import './styles/base.css'
 import './styles/vercel.css'
 
 const links = [['/guide', '导览'], ['/ontology', '本体'], ['/graph', '图谱'], ['/story', '故事线'], ['/ask', '问答'], ['/build', '构建'], ['/review', '审核']]

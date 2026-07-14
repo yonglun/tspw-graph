@@ -58,7 +58,7 @@ export function EntityPanel({
     <h3>属性证据</h3>
     {attributes.length === 0 ? <p className="empty-note">暂无属性证据</p> : attributes.flatMap(attribute => attribute.evidence.map(evidence => <EvidenceQuote key={`${attribute.id}-${evidence.id}`} id={`attribute-evidence-${attribute.id}`} evidence={evidence} selected={attribute.id === selectedAttributeId} footer={`${attribute.label} · ${attribute.value} · 字符 ${evidence.start_offset}–${evidence.end_offset}`} />))}
     <h3>关系证据</h3>
-    {facts.flatMap(fact => fact.evidence.map(evidence => <EvidenceQuote key={`${fact.id}-${evidence.id}`} id={`relation-evidence-${fact.id}`} evidence={evidence} selected={fact.id === selectedRelationId} footer={`${fact.type} · 字符 ${evidence.start_offset}–${evidence.end_offset}`}><button type="button" onClick={() => onReviewFact?.(fact.id)}>加入审核</button></EvidenceQuote>))}
+    {facts.flatMap(fact => fact.evidence.map(evidence => <EvidenceQuote key={`${fact.id}-${evidence.id}`} id={`relation-evidence-${fact.id}`} evidence={evidence} selected={fact.id === selectedRelationId} footer={`${fact.type} · 字符 ${evidence.start_offset}–${evidence.end_offset}`}>{onReviewFact && <button type="button" onClick={() => onReviewFact(fact.id)}>加入审核</button>}</EvidenceQuote>))}
   </aside>
 }
 

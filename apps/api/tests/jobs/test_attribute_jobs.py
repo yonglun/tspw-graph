@@ -7,6 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.auth.dependencies import require_ready_admin
+from app.auth.models import AdminAccount
 from app.jobs.repository import JobRepository
 from app.jobs.models import Job, JobEvent
 from app.projects.files import UploadStore
@@ -41,6 +43,12 @@ def make_client(tmp_path):
     jobs = JobRepository(engine)
     app = FastAPI()
     app.include_router(router)
+    app.dependency_overrides[require_ready_admin] = lambda: AdminAccount(
+        id="admin-test",
+        username="admin",
+        normalized_username="admin",
+        password_hash="hash",
+    )
     app.dependency_overrides[get_project_service] = lambda: service
     app.dependency_overrides[get_upload_service] = lambda: ProjectUploadService(
         projects, uploads

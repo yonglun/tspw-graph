@@ -3,6 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from neo4j import GraphDatabase
 
+from app.auth.dependencies import build_auth_service
+from app.auth.admin_router import router as admin_router
+from app.auth.router import router as auth_router
+
 from app.graph.router import router as graph_router
 from app.extraction.router import router as extraction_router
 from app.extraction.providers import ProviderError, ProviderRegistry
@@ -17,6 +21,8 @@ from app.settings import get_settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    app.state.auth_service = build_auth_service(settings)
+    app.state.auth_service.bootstrap_default_admin()
     driver = GraphDatabase.driver(
         settings.neo4j_uri,
         auth=(settings.neo4j_user, settings.neo4j_password),
@@ -35,6 +41,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="江湖图谱 API", lifespan=lifespan)
+app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(ontology_router)
 app.include_router(graph_router)
 app.include_router(qa_router)

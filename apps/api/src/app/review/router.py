@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -14,8 +14,14 @@ from app.review.models import (
 from app.review.repository import ReviewRepository
 from app.review.service import ReviewActionRequest, ReviewService
 from app.settings import Settings
+from app.auth.dependencies import require_ready_admin
+from app.auth.models import AdminAccount
 
-router = APIRouter(prefix="/api/projects/{project_id}/review", tags=["review"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/review",
+    tags=["review"],
+    dependencies=[Depends(require_ready_admin)],
+)
 
 
 class ManualReviewItemRequest(BaseModel):
@@ -72,21 +78,33 @@ def create_item(project_id: str, item: ManualReviewItemRequest):
 
 
 @router.post("/items/{item_id}/actions")
-def apply_action(project_id: str, item_id: str, request: ReviewActionRequest):
+def apply_action(
+    project_id: str,
+    item_id: str,
+    request: ReviewActionRequest,
+    admin: AdminAccount = Depends(require_ready_admin),
+):
     try:
-        return service().apply_action(project_id, item_id, request)
+        return service().apply_action(
+            project_id, item_id, request, reviewer=admin.username
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/entities/merge")
-def merge_entities(project_id: str, request: MergeEntitiesRequest):
+def merge_entities(
+    project_id: str,
+    request: MergeEntitiesRequest,
+    admin: AdminAccount = Depends(require_ready_admin),
+):
     try:
         return service().merge_entities(
             project_id,
             source_entity_id=request.source_entity_id,
             target_entity_id=request.target_entity_id,
             idempotency_key=request.idempotency_key,
+            reviewer=admin.username,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

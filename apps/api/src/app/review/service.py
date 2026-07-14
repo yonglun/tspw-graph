@@ -72,6 +72,7 @@ class ReviewService:
         source_entity_id: str,
         target_entity_id: str,
         idempotency_key: str | None = None,
+        reviewer: str = "local_reviewer",
     ) -> ReviewActionResult:
         if source_entity_id == target_entity_id:
             raise ValueError("merge_same_entity")
@@ -101,10 +102,16 @@ class ReviewService:
                 },
                 idempotency_key=idempotency_key or fingerprint,
             ),
+            reviewer=reviewer,
         )
 
     def apply_action(
-        self, project_id: str, item_id: str, request: ReviewActionRequest
+        self,
+        project_id: str,
+        item_id: str,
+        request: ReviewActionRequest,
+        *,
+        reviewer: str = "local_reviewer",
     ) -> ReviewActionResult:
         item = self.repository.get_item(project_id, item_id)
         if item is None:
@@ -144,6 +151,7 @@ class ReviewService:
             action_type=request.action_type,
             payload=request.payload,
             idempotency_key=key,
+            reviewer=reviewer,
         )
         resolved = (
             self.repository.dismiss_item(project_id, item_id)

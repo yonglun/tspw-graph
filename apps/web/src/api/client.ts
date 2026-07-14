@@ -147,13 +147,47 @@ export type ReviewAction = {
   created_at: string
 }
 
+type ApiAuthHooks = {
+  getCsrfToken?: () => string | undefined
+  onAuthenticationRequired?: () => void
+  onPasswordChangeRequired?: () => void
+}
+
+let authHooks: ApiAuthHooks = {}
+
+export function setApiAuthHooks(hooks: ApiAuthHooks) {
+  authHooks = hooks
+}
+
+export class ApiError extends Error {
+  constructor(public status: number, public code: string, public detail: unknown) {
+    super(!code || code === `HTTP_${status}` ? `请求失败（${status}）` : code)
+    this.name = 'ApiError'
+  }
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
   if (!(init?.body instanceof FormData)) headers.set('Content-Type', 'application/json')
+  const method = (init?.method ?? 'GET').toUpperCase()
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const csrf = authHooks.getCsrfToken?.()
+    if (csrf) headers.set('X-CSRF-Token', csrf)
+  }
   const response = await fetch(path, {
     ...init,
     headers,
+    credentials: 'same-origin',
   })
-  if (!response.ok) throw new Error(`请求失败（${response.status}）`)
+  if (!response.ok) {
+    let detail: unknown
+    try { detail = await response.json() } catch { detail = undefined }
+    const payload = detail as { detail?: { code?: string } } | undefined
+    const code = payload?.detail?.code ?? `HTTP_${response.status}`
+    if (response.status === 401) authHooks.onAuthenticationRequired?.()
+    if (response.status === 403 && code === 'PASSWORD_CHANGE_REQUIRED') authHooks.onPasswordChangeRequired?.()
+    throw new ApiError(response.status, code, detail)
+  }
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }

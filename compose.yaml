@@ -1,3 +1,13 @@
+x-app-env: &app-env
+  SQLITE_URL: sqlite:////data/tspw-graph.db
+  DATA_ROOT: /data/uploads
+  NEO4J_URI: bolt://neo4j:7687
+  NEO4J_USER: neo4j
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-development-only}
+  MODEL_PROFILES_JSON: '${MODEL_PROFILES_JSON:-[{"id":"fixed:test","provider":"fixed","base_url":"","model":"deterministic-test","api_key_env":"","timeout_seconds":10}]}'
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+
 services:
   neo4j:
     image: neo4j:5.26-community
@@ -17,15 +27,12 @@ services:
 
   api:
     build: ./apps/api
-    environment: &app-env
-      SQLITE_URL: sqlite:////data/tspw-graph.db
-      DATA_ROOT: /data/uploads
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-development-only}
-      MODEL_PROFILES_JSON: '${MODEL_PROFILES_JSON:-[{"id":"fixed:test","provider":"fixed","base_url":"","model":"deterministic-test","api_key_env":"","timeout_seconds":10}]}'
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+    environment:
+      <<: *app-env
+      AUTH_BOOTSTRAP_USERNAME: ${AUTH_BOOTSTRAP_USERNAME:-admin}
+      AUTH_BOOTSTRAP_PASSWORD: ${AUTH_BOOTSTRAP_PASSWORD:-Pass@word1}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_TRUST_FORWARDED_IP: "true"
     volumes:
       - app-data:/data
     depends_on:

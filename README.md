@@ -17,6 +17,8 @@ docker compose up -d --build --wait
 
 打开 `http://127.0.0.1:5173/guide`。Compose 启动 `web` / `api` / `worker` / `neo4j` 四个服务，上传文件与 SQLite 使用 `app-data` 卷。停止服务：
 
+首次启动会在管理员表为空时创建 `admin`。初始密码由 `.env` 的 `AUTH_BOOTSTRAP_PASSWORD` 提供（示例值 `Pass@word1`），首次登录必须修改。未登录用户看不到“构建”“审核”“管理员”菜单。
+
 ```bash
 docker compose down
 ```
@@ -44,6 +46,9 @@ make dev
 | `OPENAI_API_KEY` | 无 | OpenAI 兼容档案的密钥 |
 | `AZURE_OPENAI_API_KEY` | 无 | Azure OpenAI 档案的密钥 |
 | `NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt 地址 |
+| `AUTH_BOOTSTRAP_USERNAME` | `admin` | 仅空管理员表首次启动时创建的账号 |
+| `AUTH_BOOTSTRAP_PASSWORD` | `Pass@word1` | 首次启动临时密码；首次登录强制修改 |
+| `AUTH_COOKIE_SECURE` | `false` | HTTPS 部署必须设为 `true` |
 
 `.env.example` 含 OpenAI、Azure OpenAI 与 `http://host.docker.internal:11434` Ollama 示例。Azure OpenAI 档案使用 `provider="azure-openai"`，`base_url` 填资源端点，`model` 填部署名，`api_version` 默认可用 `2024-06-01`。档案只保存密钥环境变量名；Compose 会向 API 与 Worker 注入模型密钥，API 只用环境变量是否存在来标记模型档案可用，实际模型调用由 Worker 完成。
 
@@ -73,6 +78,12 @@ docker compose logs -f worker
 阶段三新增 `/review` 审核工作台。构建完成后，系统可扫描项目图谱生成待审核项；审核员可以接受/拒绝事实、合并重复实体、拆出别名，并通过审计日志追踪每次变更。
 
 默认图谱和问答读取审核后有效数据。被拒绝事实不会出现在图谱和问答中，但原始证据和审计记录会保留。
+
+构建、审核和管理员维护均要求管理员登录。若所有管理员都无法登录，可在 API 容器中重置一个**已有账号**（命令不会创建新管理员）：
+
+```bash
+docker compose exec api python -m app.auth.recover admin
+```
 
 常用命令：
 

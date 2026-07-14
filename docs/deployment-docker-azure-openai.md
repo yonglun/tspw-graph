@@ -67,6 +67,10 @@ SQLITE_URL=sqlite:///./tspw-graph.db
 MODEL_PROFILES_JSON=[{"id":"fixed:test","provider":"fixed","base_url":"","model":"deterministic-test","api_key_env":"","timeout_seconds":10},{"id":"azure:gpt-4o-mini","provider":"azure-openai","base_url":"https://YOUR_RESOURCE.openai.azure.com","model":"YOUR_DEPLOYMENT_NAME","api_key_env":"AZURE_OPENAI_API_KEY","api_version":"2024-06-01","timeout_seconds":60}]
 
 AZURE_OPENAI_API_KEY=replace-with-your-azure-openai-key
+
+AUTH_BOOTSTRAP_USERNAME=admin
+AUTH_BOOTSTRAP_PASSWORD=replace-with-a-strong-temporary-password
+AUTH_COOKIE_SECURE=false
 ```
 
 关键字段说明：
@@ -85,6 +89,8 @@ AZURE_OPENAI_API_KEY=replace-with-your-azure-openai-key
 - `MODEL_PROFILES_JSON` 必须是合法 JSON，建议保持单行，避免 shell 或 `.env` 解析问题。
 - Azure OpenAI 的 `model` 字段填部署名。例如你在 Azure Portal 中创建的 deployment 叫 `kg-extractor-gpt4o-mini`，这里就填这个部署名。
 - 不要把真实密钥提交到 Git；`.env` 不应纳入版本管理。
+- `AUTH_BOOTSTRAP_*` 只在管理员表为空时生效。首次登录后系统强制修改临时密码。
+- 通过 HTTPS 域名部署时必须设置 `AUTH_COOKIE_SECURE=true`，然后重建 API 容器。
 
 ## 5. 启动服务
 
@@ -101,6 +107,16 @@ Neo4j 登录：
 
 - 用户名：`neo4j`
 - 密码：`.env` 中的 `NEO4J_PASSWORD`
+
+管理员入口位于页面右上角。未登录时构建、审核和管理员菜单均隐藏。首次使用 `.env` 中的管理员账号和临时密码登录，并按提示修改密码。
+
+如果全部管理员账号均无法登录，使用交互式恢复命令重置一个已有管理员：
+
+```bash
+docker compose exec api python -m app.auth.recover admin
+```
+
+该命令不会创建新管理员，会启用目标账号、撤销其现有会话，并要求下次登录修改密码。
 
 查看服务状态：
 

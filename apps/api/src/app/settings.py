@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     sqlite_url: str = "sqlite:///./tspw-graph.db"
     data_root: Path = Path("./data/uploads")
     max_upload_bytes: int = 20 * 1024 * 1024
+    auth_bootstrap_username: str = "admin"
+    auth_bootstrap_password: str = "Pass@word1"
+    auth_cookie_name: str = "tspw_admin_session"
+    auth_cookie_secure: bool = False
+    auth_session_idle_seconds: int = 8 * 60 * 60
+    auth_login_max_failures: int = 5
+    auth_login_lock_seconds: int = 15 * 60
+    auth_trust_forwarded_ip: bool = False
     qa_model_profile_id: str = "azure:gpt-4o-mini"
     model_profiles: list[ModelProfileSettings] = Field(
         default_factory=lambda: [

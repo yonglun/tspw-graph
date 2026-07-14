@@ -11,6 +11,10 @@ from app.projects.models import Base
 from .models import AdminAccount, AdminAuditEvent, AdminLoginThrottle, AdminSession
 
 
+class LastEnabledAdminError(Exception):
+    pass
+
+
 def normalize_username(value: str) -> str:
     return value.strip().casefold()
 
@@ -76,6 +80,53 @@ class AuthRepository:
             account.updated_at = self.now()
         return account
 
+    def disable_admin(self, admin_id: str) -> AdminAccount:
+        with self._sessions() as session:
+            self._begin_serialized_write(session)
+            account = session.get(AdminAccount, admin_id)
+            if account is None:
+                session.rollback()
+                raise KeyError(admin_id)
+            if account.enabled:
+                enabled_count = int(
+                    session.scalar(
+                        select(func.count())
+                        .select_from(AdminAccount)
+                        .where(AdminAccount.enabled.is_(True))
+                    )
+                    or 0
+                )
+                if enabled_count <= 1:
+                    session.rollback()
+                    raise LastEnabledAdminError(admin_id)
+                account.enabled = False
+                account.updated_at = self.now()
+                session.execute(delete(AdminSession).where(AdminSession.admin_id == account.id))
+            session.commit()
+            return account
+
+    def reset_admin_password(
+        self,
+        admin_id: str,
+        *,
+        password_hash: str,
+        enable: bool = False,
+    ) -> AdminAccount:
+        with self._sessions() as session:
+            self._begin_serialized_write(session)
+            account = session.get(AdminAccount, admin_id)
+            if account is None:
+                session.rollback()
+                raise KeyError(admin_id)
+            account.password_hash = password_hash
+            account.must_change_password = True
+            if enable:
+                account.enabled = True
+            account.updated_at = self.now()
+            session.execute(delete(AdminSession).where(AdminSession.admin_id == account.id))
+            session.commit()
+            return account
+
     def create_session(self, admin_id: str, *, token_hash: str, csrf_token: str, ip_address: str | None, user_agent: str | None, expires_at: datetime) -> AdminSession:
         admin_session = AdminSession(
             admin_id=admin_id,
@@ -124,11 +175,16 @@ class AuthRepository:
 
     def record_login_failure(self, normalized_username: str, ip_address: str) -> AdminLoginThrottle:
         now = self.now()
-        with self._sessions.begin() as session:
-            throttle = session.scalar(select(AdminLoginThrottle).where(
-                AdminLoginThrottle.normalized_username == normalized_username,
-                AdminLoginThrottle.ip_address == ip_address,
-            ))
+        with self._sessions() as session:
+            self._begin_serialized_write(session)
+            throttle = session.scalar(
+                select(AdminLoginThrottle)
+                .where(
+                    AdminLoginThrottle.normalized_username == normalized_username,
+                    AdminLoginThrottle.ip_address == ip_address,
+                )
+                .with_for_update()
+            )
             if throttle is None:
                 throttle = AdminLoginThrottle(
                     normalized_username=normalized_username,
@@ -143,6 +199,7 @@ class AuthRepository:
             throttle.updated_at = now
             if throttle.failure_count >= self.max_failures:
                 throttle.locked_until = now + timedelta(seconds=self.lock_seconds)
+            session.commit()
         return throttle
 
     def clear_login_failures(self, normalized_username: str, ip_address: str) -> None:
@@ -171,6 +228,10 @@ class AuthRepository:
     def list_audit_events(self, *, limit: int = 100) -> list[AdminAuditEvent]:
         with self._sessions() as session:
             return list(session.scalars(select(AdminAuditEvent).order_by(AdminAuditEvent.created_at.desc()).limit(limit)))
+
+    def _begin_serialized_write(self, session: Session) -> None:
+        if self.engine.dialect.name == "sqlite":
+            session.connection().exec_driver_sql("BEGIN IMMEDIATE")
 
 
 def _aware(value: datetime) -> datetime:

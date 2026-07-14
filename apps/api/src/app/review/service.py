@@ -90,7 +90,6 @@ class ReviewService:
                 fingerprint=fingerprint,
                 severity=80,
             ),
-            reviewer=reviewer,
         )
         return self.apply_action(
             project_id,
@@ -103,6 +102,7 @@ class ReviewService:
                 },
                 idempotency_key=idempotency_key or fingerprint,
             ),
+            reviewer=reviewer,
         )
 
     def apply_action(

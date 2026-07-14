@@ -5,7 +5,9 @@ from datetime import UTC, datetime, timedelta
 
 from app.settings import Settings
 
-from .repository import AuthRepository, normalize_username
+from sqlalchemy.exc import IntegrityError
+
+from .repository import AuthRepository, LastEnabledAdminError, normalize_username
 from .schemas import AdminSummary, AuditEventResponse, AuditPage, AuthContext, SessionResponse
 from .security import PasswordPolicy, PasswordSecurity, csrf_matches, hash_session_token, new_token
 
@@ -39,11 +41,19 @@ class AuthService:
         failures = PasswordPolicy.validate(self.settings.auth_bootstrap_password)
         if failures:
             raise RuntimeError(f"Bootstrap password violates policy: {','.join(failures)}")
-        return self.repository.create_admin(
-            self.settings.auth_bootstrap_username,
-            self.password_security.hash(self.settings.auth_bootstrap_password),
-            must_change_password=True,
-        )
+        try:
+            return self.repository.create_admin(
+                self.settings.auth_bootstrap_username,
+                self.password_security.hash(self.settings.auth_bootstrap_password),
+                must_change_password=True,
+            )
+        except IntegrityError:
+            account = self.repository.find_admin_by_username(
+                self.settings.auth_bootstrap_username
+            )
+            if account is None:
+                raise
+            return account
 
     def login(self, username: str, password: str, ip_address: str, user_agent: str | None) -> LoginResult:
         normalized = normalize_username(username)
@@ -51,18 +61,21 @@ class AuthService:
         now = self.repository.now()
         if throttle and throttle.locked_until and _aware(throttle.locked_until) > now:
             retry = max(1, int((_aware(throttle.locked_until) - now).total_seconds()))
-            raise AuthError("ACCOUNT_LOCKED", status_code=429, retry_after_seconds=retry)
+            raise AuthError("ACCOUNT_LOCKED", status_code=423, retry_after_seconds=retry)
 
         admin = self.repository.find_admin_by_username(username)
         valid = self.password_security.verify(admin.password_hash if admin else self._dummy_hash, password)
-        if admin is None or not admin.enabled or not valid:
+        if admin is None or not valid:
             failed = self.repository.record_login_failure(normalized, ip_address)
             if failed.locked_until and _aware(failed.locked_until) > now:
                 retry = max(1, int((_aware(failed.locked_until) - now).total_seconds()))
                 self.repository.add_audit_event(actor=None, target=admin, action="LOGIN", result="LOCKED", ip_address=ip_address, metadata={"username": username.strip()})
-                raise AuthError("ACCOUNT_LOCKED", status_code=429, retry_after_seconds=retry)
+                raise AuthError("ACCOUNT_LOCKED", status_code=423, retry_after_seconds=retry)
             self.repository.add_audit_event(actor=None, target=admin, action="LOGIN", result="REJECTED", ip_address=ip_address, metadata={"username": username.strip()})
             raise AuthError("INVALID_CREDENTIALS", status_code=401)
+        if not admin.enabled:
+            self.repository.add_audit_event(actor=None, target=admin, action="LOGIN", result="REJECTED", ip_address=ip_address, metadata={"reason": "ACCOUNT_DISABLED"})
+            raise AuthError("ACCOUNT_DISABLED", status_code=403)
 
         self.repository.clear_login_failures(normalized, ip_address)
         raw_token = new_token()
@@ -130,7 +143,10 @@ class AuthService:
         self._validate_password(temporary_password)
         if self.repository.find_admin_by_username(username):
             raise AuthError("USERNAME_ALREADY_EXISTS", status_code=409)
-        account = self.repository.create_admin(username, self.password_security.hash(temporary_password), must_change_password=True)
+        try:
+            account = self.repository.create_admin(username, self.password_security.hash(temporary_password), must_change_password=True)
+        except IntegrityError as error:
+            raise AuthError("USERNAME_ALREADY_EXISTS", status_code=409) from error
         self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_CREATED", result="SUCCESS", ip_address=ip_address, metadata={})
         return AdminSummary.from_account(account)
 
@@ -141,7 +157,10 @@ class AuthService:
         if duplicate and duplicate.id != account.id:
             raise AuthError("USERNAME_ALREADY_EXISTS", status_code=409)
         old_username = account.username
-        account = self.repository.update_admin(admin_id, username=username.strip(), normalized_username=normalize_username(username))
+        try:
+            account = self.repository.update_admin(admin_id, username=username.strip(), normalized_username=normalize_username(username))
+        except IntegrityError as error:
+            raise AuthError("USERNAME_ALREADY_EXISTS", status_code=409) from error
         self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_RENAMED", result="SUCCESS", ip_address=ip_address, metadata={"old_username": old_username, "new_username": account.username})
         return AdminSummary.from_account(account)
 
@@ -156,18 +175,21 @@ class AuthService:
         if account.id == actor.admin.id:
             self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_DISABLED", result="REJECTED", ip_address=ip_address, metadata={"reason": "SELF"})
             raise AuthError("CANNOT_DISABLE_SELF", status_code=409)
-        if account.enabled and self.repository.enabled_admin_count() <= 1:
-            raise AuthError("LAST_ACTIVE_ADMIN", status_code=409)
-        account = self.repository.update_admin(account.id, enabled=False)
-        self.repository.revoke_admin_sessions(account.id)
+        try:
+            account = self.repository.disable_admin(account.id)
+        except LastEnabledAdminError as error:
+            self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_DISABLED", result="REJECTED", ip_address=ip_address, metadata={"reason": "LAST_ACTIVE_ADMIN"})
+            raise AuthError("LAST_ACTIVE_ADMIN", status_code=409) from error
         self.repository.add_audit_event(actor=actor.admin, target=account, action="ADMIN_DISABLED", result="SUCCESS", ip_address=ip_address, metadata={})
         return AdminSummary.from_account(account)
 
     def reset_password(self, actor: AuthContext, admin_id: str, temporary_password: str, ip_address: str | None) -> AdminSummary:
         self._validate_password(temporary_password)
         account = self._admin_or_error(admin_id)
-        account = self.repository.update_admin(account.id, password_hash=self.password_security.hash(temporary_password), must_change_password=True)
-        self.repository.revoke_admin_sessions(account.id)
+        account = self.repository.reset_admin_password(
+            account.id,
+            password_hash=self.password_security.hash(temporary_password),
+        )
         self.repository.add_audit_event(actor=actor.admin, target=account, action="PASSWORD_RESET", result="SUCCESS", ip_address=ip_address, metadata={})
         return AdminSummary.from_account(account)
 
@@ -189,13 +211,11 @@ class AuthService:
         account = self.repository.find_admin_by_username(username)
         if account is None:
             raise AuthError("ADMIN_NOT_FOUND", status_code=404)
-        account = self.repository.update_admin(
+        account = self.repository.reset_admin_password(
             account.id,
             password_hash=self.password_security.hash(temporary_password),
-            must_change_password=True,
-            enabled=True,
+            enable=True,
         )
-        self.repository.revoke_admin_sessions(account.id)
         self.repository.add_audit_event(actor=None, target=account, action="SYSTEM_RECOVERY", result="SUCCESS", ip_address=None, metadata={})
 
     def _admin_or_error(self, admin_id: str):

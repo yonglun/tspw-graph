@@ -124,6 +124,7 @@ select:focus-visible {
   border: 0; border-radius: var(--ds-radius); background: #fff; box-shadow: var(--ds-shadow-border);
 }
 .form-error { margin: 0; color: #c62828; font-size: 13px; }
+.admin-error { margin: 0 0 24px; }
 .auth-loading { min-height: 50vh; display: grid; place-items: center; color: var(--ds-text-secondary); }
 
 .admin-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, .7fr); gap: 24px; }
@@ -135,6 +136,8 @@ select:focus-visible {
 .audit-list li:last-child { box-shadow: none; }
 .admin-table small,
 .audit-list small { display: block; margin-top: 4px; color: var(--ds-text-muted); }
+.auth-form label small { color: var(--ds-text-muted); font-size: 12px; line-height: 1.5; }
+.row-actions button:disabled { cursor: not-allowed; color: var(--ds-text-muted); background: transparent; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #8f8f8f; }
 .status-dot.success { background: #398e4a; }
 .status-dot.danger { background: #e5484d; }

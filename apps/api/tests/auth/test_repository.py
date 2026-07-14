@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 
-from app.auth.repository import AuthRepository
+from app.auth.repository import AuthRepository, LastEnabledAdminError
 from app.auth.security import hash_session_token
 
 
@@ -48,3 +48,14 @@ def test_audit_metadata_drops_secrets(repository: AuthRepository):
         metadata={"reason": "user", "password": "secret", "csrf_token": "secret"},
     )
     assert event.event_metadata == {"reason": "user"}
+
+
+def test_disabling_the_last_enabled_admin_is_rejected_in_the_write_transaction(
+    repository: AuthRepository,
+):
+    admin = repository.create_admin("admin", "hash", must_change_password=True)
+
+    with pytest.raises(LastEnabledAdminError):
+        repository.disable_admin(admin.id)
+
+    assert repository.get_admin(admin.id).enabled is True

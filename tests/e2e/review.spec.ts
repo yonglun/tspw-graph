@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test'
+import { ensureAdmin } from './auth.setup'
 
 test('reviewer scans, accepts and sees audit trail', async ({ page }) => {
+  const csrf = await ensureAdmin(page)
   await page.request.post('/api/projects/xiaoao/review/items', {
+    headers: { 'X-CSRF-Token': csrf },
     data: {
       item_type: 'FACT',
       reason_code: 'MANUAL_REVIEW',

@@ -47,6 +47,7 @@ def test_fifth_failure_locks_username_and_ip_for_fifteen_minutes(setup_service):
             service.login("admin", "wrong", "10.0.0.1", "pytest")
     with pytest.raises(AuthError, match="ACCOUNT_LOCKED") as locked:
         service.login("admin", "wrong", "10.0.0.1", "pytest")
+    assert locked.value.status_code == 423
     assert locked.value.retry_after_seconds == 900
 
 
@@ -73,8 +74,14 @@ def test_cannot_disable_self_and_can_disable_another_admin(setup_service):
     with pytest.raises(AuthError, match="CANNOT_DISABLE_SELF"):
         service.disable_admin(context, context.admin.id, "127.0.0.1")
     second = service.create_admin(context, "second", "Second@Pass2", "127.0.0.1")
+    second_login = service.login("second", "Second@Pass2", "127.0.0.2", "pytest")
     service.disable_admin(context, second.id, "127.0.0.1")
     assert repository.get_admin(second.id).enabled is False
+    with pytest.raises(AuthError, match="AUTHENTICATION_REQUIRED"):
+        service.authenticate(second_login.session_token)
+    with pytest.raises(AuthError, match="ACCOUNT_DISABLED") as disabled:
+        service.login("second", "Second@Pass2", "127.0.0.2", "pytest")
+    assert disabled.value.status_code == 403
 
 
 def test_reset_password_revokes_sessions_and_forces_change(setup_service):

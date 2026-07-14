@@ -3,6 +3,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
+from app.auth.dependencies import require_ready_admin
+from app.auth.models import AdminAccount
 from app.jobs.models import JobStatus
 from app.jobs.repository import JobRepository
 from app.jobs.router import get_job_service, router
@@ -18,6 +20,9 @@ def make_client() -> tuple[TestClient, JobRepository]:
     repository = JobRepository(engine)
     app = FastAPI()
     app.include_router(router)
+    app.dependency_overrides[require_ready_admin] = lambda: AdminAccount(
+        id="admin-test", username="admin", normalized_username="admin", password_hash="hash"
+    )
     app.dependency_overrides[get_job_service] = lambda: JobService(repository)
     return TestClient(app), repository
 

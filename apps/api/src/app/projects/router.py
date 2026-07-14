@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 
+from app.auth.dependencies import require_ready_admin
+from app.auth.models import AdminAccount
 from app.graph.neo4j import Neo4jGraphWriter
 from app.jobs.models import JobKind
 from app.jobs.repository import JobRepository
@@ -79,6 +81,7 @@ def upload_project(
     title: Annotated[str, Form(min_length=1, max_length=300)],
     model_profile_id: Annotated[str, Form(min_length=1, max_length=100)],
     file: Annotated[UploadFile, File()],
+    _admin: AdminAccount = Depends(require_ready_admin),
 ) -> ProjectCreated:
     if model_profile_id not in {profile.id for profile in get_settings().model_profiles}:
         raise HTTPException(422, detail={"code": "UNKNOWN_MODEL_PROFILE"})
@@ -120,6 +123,7 @@ def create_attribute_job(
     request: AttributeJobRequest,
     service: Service,
     jobs: Jobs,
+    _admin: AdminAccount = Depends(require_ready_admin),
 ) -> JobSnapshot:
     try:
         project = service.get(project_id)
@@ -165,7 +169,11 @@ def get_project(project_id: str, service: Service) -> ProjectSummary:
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(project_id: str, service: Service) -> Response:
+def delete_project(
+    project_id: str,
+    service: Service,
+    _admin: AdminAccount = Depends(require_ready_admin),
+) -> Response:
     try:
         service.delete(project_id)
     except BuiltinProjectError as error:

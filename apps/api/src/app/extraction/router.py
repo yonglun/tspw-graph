@@ -1,11 +1,12 @@
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.settings import get_settings
+from app.auth.dependencies import require_ready_admin
 
-router = APIRouter(tags=["models"])
+router = APIRouter(tags=["models"], dependencies=[Depends(require_ready_admin)])
 
 
 class PublicModelProfile(BaseModel):

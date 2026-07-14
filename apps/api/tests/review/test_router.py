@@ -1,8 +1,16 @@
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.auth.dependencies import require_ready_admin
+from app.auth.models import AdminAccount
+from app.review.router import router
 
 
+app = FastAPI()
+app.include_router(router)
+app.dependency_overrides[require_ready_admin] = lambda: AdminAccount(
+    id="admin-test", username="admin", normalized_username="admin", password_hash="hash"
+)
 client = TestClient(app)
 
 

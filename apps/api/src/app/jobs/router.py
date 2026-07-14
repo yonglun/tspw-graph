@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine
 
+from app.auth.dependencies import require_ready_admin
 from app.jobs.models import (
     TERMINAL_STATUSES,
     InvalidJobTransition,
@@ -20,7 +21,11 @@ from app.jobs.repository import JobRepository
 from app.jobs.service import JobNotFoundError, JobService, QualityNotReadyError
 from app.settings import get_settings
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+router = APIRouter(
+    prefix="/api/jobs",
+    tags=["jobs"],
+    dependencies=[Depends(require_ready_admin)],
+)
 
 
 class JobSnapshot(BaseModel):

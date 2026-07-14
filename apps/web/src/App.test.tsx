@@ -11,6 +11,17 @@ afterEach(() => {
 })
 
 describe('App', () => {
+  it('renders the monochrome product header with primary navigation', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([]))))
+    render(<App />)
+
+    const header = screen.getByRole('banner')
+    expect(header).toHaveClass('site-header')
+    expect(screen.getByRole('link', { name: '江湖图谱' })).toHaveClass('brand')
+    expect(screen.getByRole('navigation', { name: '主导航' })).toBeVisible()
+    expect(screen.getByLabelText('当前项目')).toBeVisible()
+  })
+
   it('shows the product brand and page heading', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([]))))
     render(<App />)

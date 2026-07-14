@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 
 import { ProjectProvider } from '../../app/ProjectContext'
+import { AuthContext, type AuthValue } from '../../app/AuthContext'
 import { ProjectSwitcher } from '../projects/ProjectSwitcher'
 import { GraphPage } from './GraphPage'
 
@@ -12,6 +13,19 @@ const entity = {
   name: '令狐沖', aliases: ['令狐冲'], description: '华山派大弟子。',
 }
 const yue = { id: 'yue', project_id: 'xiaoao', type: 'Person', name: '岳不群', aliases: [], description: '' }
+const readyAuth: AuthValue = {
+  status: 'ready',
+  admin: { id: 'admin-test', username: 'admin', is_enabled: true, must_change_password: false, created_at: '', updated_at: '' },
+  mustChangePassword: false,
+  login: async () => undefined,
+  logout: async () => undefined,
+  changePassword: async () => undefined,
+  refreshSession: async () => undefined,
+}
+
+function renderGraph() {
+  return render(<AuthContext.Provider value={readyAuth}><GraphPage /></AuthContext.Provider>)
+}
 
 function deferredResponse<T>() {
   let resolve!: (value: Response) => void
@@ -42,7 +56,7 @@ describe('GraphPage', () => {
       return new Response(JSON.stringify({ nodes: [entity], edges: [] }))
     }))
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -74,7 +88,7 @@ describe('GraphPage', () => {
       return new Response(JSON.stringify({}))
     }))
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -105,7 +119,7 @@ describe('GraphPage', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -133,7 +147,7 @@ describe('GraphPage', () => {
       return new Response(JSON.stringify({}))
     }))
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -152,7 +166,7 @@ describe('GraphPage', () => {
       return Promise.resolve(new Response(JSON.stringify({})))
     }))
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -175,7 +189,7 @@ describe('GraphPage', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -198,7 +212,7 @@ describe('GraphPage', () => {
       return new Response(JSON.stringify({}))
     }))
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -222,7 +236,7 @@ describe('GraphPage', () => {
       return Promise.resolve(new Response(JSON.stringify({})))
     }))
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -239,7 +253,7 @@ describe('GraphPage', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify([entity])))
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令')
     expect(await screen.findByRole('alert')).toHaveTextContent('请求失败（500）')
@@ -295,7 +309,7 @@ describe('GraphPage', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByText('令狐冲'))
@@ -325,7 +339,7 @@ describe('GraphPage', () => {
       return new Response(JSON.stringify({}))
     }))
     const user = userEvent.setup()
-    render(<GraphPage />)
+    renderGraph()
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
@@ -355,7 +369,7 @@ describe('GraphPage', () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter initialEntries={['/graph?project=p-1']}>
-        <ProjectProvider><ProjectSwitcher /><GraphPage /></ProjectProvider>
+        <AuthContext.Provider value={readyAuth}><ProjectProvider><ProjectSwitcher /><GraphPage /></ProjectProvider></AuthContext.Provider>
       </MemoryRouter>,
     )
 

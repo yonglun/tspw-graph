@@ -2,6 +2,7 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from 're
 
 import { apiFetch, type EntityDetail, type EntitySummary, type Neighborhood, type RelationEvidence } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
+import { useAuth } from '../../app/AuthContext'
 import { EntityPanel } from './EntityPanel'
 import { GraphCanvas } from './GraphCanvas'
 import { visibleEntityTypeStyles } from './entityTypeStyles'
@@ -10,6 +11,7 @@ const EMPTY_GRAPH: Neighborhood = { nodes: [], edges: [] }
 
 export function GraphPage() {
   const { projectId } = useProject()
+  const auth = useAuth()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<EntitySummary[]>([])
   const [graph, setGraph] = useState<Neighborhood>(EMPTY_GRAPH)
@@ -134,5 +136,5 @@ export function GraphPage() {
     setRelationEvidence(undefined)
   }, [])
 
-  return <section className="graph-page"><header className="graph-toolbar"><div><p className="eyebrow">GRAPH EXPLORER · 03</p><h1>沿关系，游江湖</h1></div><div className="search-wrap"><label htmlFor="graph-search">搜索人物、门派或武学</label><input id="graph-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="例如：令狐冲" />{results.length > 0 && <div className="search-results">{results.map(item => <button key={item.id} onClick={() => selectEntity(item)}><b>{item.name}</b><span>{item.type} · {item.description}</span></button>)}</div>}</div></header>{error && <div role="alert" className="error-state">{error}</div>}{relationEvidenceLoading && <div className="loading-state" role="status">正在加载关系证据…</div>}<div className="graph-workspace"><GraphCanvas graph={graph} centerId={selected?.id} selectedRelationId={selectedRelationId} onSelect={selectEntityById} onSelectEdge={selectRelation} /><EntityPanel detail={detail} onClose={() => { setDetail(undefined); setSelectedRelationId(undefined); setSelectedAttributeId(undefined); setRelationEvidence(undefined) }} onReviewFact={reviewFact} onSelectRelation={selectRelation} onSelectAttribute={selectAttribute} selectedRelationId={selectedRelationId} selectedAttributeId={selectedAttributeId} relationEvidence={relationEvidence} /></div><footer className="graph-legend">{visibleEntityTypeStyles(graph.nodes).map(type => <span key={type.label}><i style={{ '--legend-color': type.color } as CSSProperties} />{type.label}</span>)}{selected && graphDepth === 1 && !graphLoading && <button type="button" className="text-button" onClick={expandTwoHop}>展开二度关系</button>}<b>{graph.nodes.length} 节点 · {graph.edges.length} 关系</b></footer></section>
+  return <section className="graph-page"><header className="graph-toolbar"><div><p className="eyebrow">GRAPH EXPLORER · 03</p><h1>沿关系，游江湖</h1></div><div className="search-wrap"><label htmlFor="graph-search">搜索人物、门派或武学</label><input id="graph-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="例如：令狐冲" />{results.length > 0 && <div className="search-results">{results.map(item => <button key={item.id} onClick={() => selectEntity(item)}><b>{item.name}</b><span>{item.type} · {item.description}</span></button>)}</div>}</div></header>{error && <div role="alert" className="error-state">{error}</div>}{relationEvidenceLoading && <div className="loading-state" role="status">正在加载关系证据…</div>}<div className="graph-workspace"><GraphCanvas graph={graph} centerId={selected?.id} selectedRelationId={selectedRelationId} onSelect={selectEntityById} onSelectEdge={selectRelation} /><EntityPanel detail={detail} onClose={() => { setDetail(undefined); setSelectedRelationId(undefined); setSelectedAttributeId(undefined); setRelationEvidence(undefined) }} onReviewFact={auth.status === 'ready' ? reviewFact : undefined} onSelectRelation={selectRelation} onSelectAttribute={selectAttribute} selectedRelationId={selectedRelationId} selectedAttributeId={selectedAttributeId} relationEvidence={relationEvidence} /></div><footer className="graph-legend">{visibleEntityTypeStyles(graph.nodes).map(type => <span key={type.label}><i style={{ '--legend-color': type.color } as CSSProperties} />{type.label}</span>)}{selected && graphDepth === 1 && !graphLoading && <button type="button" className="text-button" onClick={expandTwoHop}>展开二度关系</button>}<b>{graph.nodes.length} 节点 · {graph.edges.length} 关系</b></footer></section>
 }

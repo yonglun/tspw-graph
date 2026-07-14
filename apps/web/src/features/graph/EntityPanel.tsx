@@ -41,9 +41,20 @@ export function EntityPanel({
     <p className="eyebrow">{detail.type}</p><h2>{detail.name}</h2><p>{detail.description}</p>
     {detail.aliases.length > 0 && <p className="aliases">别名 · {detail.aliases.join('、')}</p>}
     <hr /><h3>本体属性</h3>
-    {attributes.length === 0 ? <p className="empty-note">尚未抽取到有证据支持的属性</p> : <dl className="attribute-list">{groupedAttributes.map(group => <div key={group.label} className={group.ids.includes(selectedAttributeId ?? '') ? 'is-selected' : ''} role="button" tabIndex={0} onClick={() => onSelectAttribute?.(group.ids[0])} onKeyDown={event => { if (event.key === 'Enter') onSelectAttribute?.(group.ids[0]) }}><dt>{group.label}</dt><dd>{group.values.join('、')}</dd></div>)}</dl>}
+    {attributes.length === 0 ? <p className="empty-note">尚未抽取到有证据支持的属性</p> : <dl className="attribute-list">{groupedAttributes.map(group => {
+      const selected = group.ids.includes(selectedAttributeId ?? '')
+      return <div key={group.label} className={selected ? 'is-selected' : ''}>
+        <dt><button type="button" aria-label={`${group.label} ${group.values.join('、')}`} aria-pressed={selected} onClick={() => onSelectAttribute?.(group.ids[0])}>{group.label}</button></dt>
+        <dd>{group.values.join('、')}</dd>
+      </div>
+    })}</dl>}
     <h3>关系摘要</h3>
-    {relations.length === 0 ? <p className="empty-note">暂无关系摘要</p> : <ul className="relation-list">{relations.map(relation => <li key={relation.fact_id} className={relation.fact_id === selectedRelationId ? 'is-selected' : ''} role="button" tabIndex={0} onClick={() => onSelectRelation?.(relation.fact_id)} onKeyDown={event => { if (event.key === 'Enter') onSelectRelation?.(relation.fact_id) }}><span>{relation.label}</span><b>{relation.other.name}</b></li>)}</ul>}
+    {relations.length === 0 ? <p className="empty-note">暂无关系摘要</p> : <ul className="relation-list">{relations.map(relation => {
+      const selected = relation.fact_id === selectedRelationId
+      return <li key={relation.fact_id} className={selected ? 'is-selected' : ''}>
+        <button type="button" aria-pressed={selected} onClick={() => onSelectRelation?.(relation.fact_id)}><span>{relation.label}</span><b>{relation.other.name}</b></button>
+      </li>
+    })}</ul>}
     <h3>属性证据</h3>
     {attributes.length === 0 ? <p className="empty-note">暂无属性证据</p> : attributes.flatMap(attribute => attribute.evidence.map(evidence => <EvidenceQuote key={`${attribute.id}-${evidence.id}`} id={`attribute-evidence-${attribute.id}`} evidence={evidence} selected={attribute.id === selectedAttributeId} footer={`${attribute.label} · ${attribute.value} · 字符 ${evidence.start_offset}–${evidence.end_offset}`} />))}
     <h3>关系证据</h3>

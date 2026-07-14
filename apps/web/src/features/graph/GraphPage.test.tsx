@@ -109,11 +109,18 @@ describe('GraphPage', () => {
 
     await user.type(screen.getByRole('searchbox'), '令狐冲')
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
-    await user.click(await screen.findByRole('button', { name: /师父.*岳不群/ }))
+    const relationButton = await screen.findByRole('button', { name: /师父.*岳不群/ })
+    expect(relationButton).toHaveAttribute('aria-pressed', 'false')
+    relationButton.focus()
+    await user.keyboard(' ')
 
     expect(await screen.findByText('关系原文证据')).toBeVisible()
+    expect(relationButton).toHaveAttribute('aria-pressed', 'true')
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/graph/relations/fact-1'), expect.anything())
-    await user.click(screen.getByText('身份'))
+    const attributeButton = screen.getByRole('button', { name: /身份.*华山派大弟子/ })
+    attributeButton.focus()
+    await user.keyboard('{Enter}')
+    expect(attributeButton).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getAllByText('华山派大弟子').length).toBeGreaterThanOrEqual(1)
   })
 

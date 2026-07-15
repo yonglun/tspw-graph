@@ -45,7 +45,7 @@
 - Consumes: `repository.qa_suggestion_candidate(project_id: str) -> dict[str, Any] | None` from Task 2.
 - Produces: `QaSuggestionService.suggest(project_id: str, project_title: str) -> QaSuggestionsResponse`, `QaSuggestionsResponse`, `QaSuggestion`, and `QaRepresentativeEntity`.
 
-- [ ] **Step 1: Write failing service tests for ordered, bounded, evidence-qualified capabilities**
+- [x] **Step 1: Write failing service tests for ordered, bounded, evidence-qualified capabilities**
 
 Create `apps/api/tests/qa/test_suggestions.py` with a fake repository returning the already-aggregated candidate shape:
 
@@ -105,7 +105,7 @@ def test_ignores_unknown_capabilities() -> None:
     assert response.suggestions == []
 ```
 
-- [ ] **Step 2: Run the new test and verify the missing-module failure**
+- [x] **Step 2: Run the new test and verify the missing-module failure**
 
 Run:
 
@@ -116,7 +116,7 @@ pytest tests/qa/test_suggestions.py -q
 
 Expected: collection fails with `ModuleNotFoundError: No module named 'app.qa.suggestions'`.
 
-- [ ] **Step 3: Add the exact API models**
+- [x] **Step 3: Add the exact API models**
 
 Append to `apps/api/src/app/qa/models.py`:
 
@@ -146,7 +146,7 @@ class QaSuggestionsResponse(BaseModel):
 
 Move `from typing import Literal` to the import section rather than leaving it between declarations.
 
-- [ ] **Step 4: Implement the controlled suggestion builder**
+- [x] **Step 4: Implement the controlled suggestion builder**
 
 Create `apps/api/src/app/qa/suggestions.py`:
 
@@ -227,7 +227,7 @@ class QaSuggestionService:
         )
 ```
 
-- [ ] **Step 5: Run the service tests**
+- [x] **Step 5: Run the service tests**
 
 Run:
 
@@ -238,7 +238,7 @@ pytest tests/qa/test_suggestions.py -q
 
 Expected: `3 passed`.
 
-- [ ] **Step 6: Commit the service contract**
+- [x] **Step 6: Commit the service contract**
 
 ```bash
 git add apps/api/src/app/qa/models.py apps/api/src/app/qa/suggestions.py apps/api/tests/qa/test_suggestions.py
@@ -257,7 +257,7 @@ git commit -m "feat: add controlled QA suggestion service"
 - Consumes: Neo4j nodes `Entity`, `Fact`, `AttributeAssertion`, and `Evidence` already written by the importer.
 - Produces: `Neo4jGraphRepository.qa_suggestion_candidate(project_id: str) -> dict[str, Any] | None` with keys `entity`, `relation_capabilities`, and `property_capabilities`.
 
-- [ ] **Step 1: Write failing repository mapping and query-safety tests**
+- [x] **Step 1: Write failing repository mapping and query-safety tests**
 
 Append to `apps/api/tests/graph/test_service.py`:
 
@@ -300,7 +300,7 @@ def test_qa_suggestion_candidate_returns_none_for_empty_project() -> None:
     assert repository.qa_suggestion_candidate("empty") is None
 ```
 
-- [ ] **Step 2: Run the repository tests and verify the missing-method failure**
+- [x] **Step 2: Run the repository tests and verify the missing-method failure**
 
 Run:
 
@@ -311,7 +311,7 @@ pytest tests/graph/test_service.py -q
 
 Expected: the two new tests fail with `AttributeError: 'Neo4jGraphRepository' object has no attribute 'qa_suggestion_candidate'`.
 
-- [ ] **Step 3: Implement one database-side ranking query**
+- [x] **Step 3: Implement one database-side ranking query**
 
 Add this method to `Neo4jGraphRepository` in `apps/api/src/app/graph/repository.py`:
 
@@ -407,7 +407,7 @@ Add this method to `Neo4jGraphRepository` in `apps/api/src/app/graph/repository.
             }
 ```
 
-- [ ] **Step 4: Run the graph repository tests**
+- [x] **Step 4: Run the graph repository tests**
 
 Run:
 
@@ -418,7 +418,7 @@ pytest tests/graph/test_service.py -q
 
 Expected: all tests in the file pass, including the two new candidate-query tests.
 
-- [ ] **Step 5: Commit the bounded graph query**
+- [x] **Step 5: Commit the bounded graph query**
 
 ```bash
 git add apps/api/src/app/graph/repository.py apps/api/tests/graph/test_service.py
@@ -438,7 +438,7 @@ git commit -m "feat: select evidence-backed QA representative"
 - Consumes: `QaSuggestionService.suggest(project_id, project.title)` from Task 1 and `get_repository`/`execute` from the existing graph router.
 - Produces: `GET /api/projects/{project_id}/qa-suggestions -> QaSuggestionsResponse`.
 
-- [ ] **Step 1: Extend the project-router fixture with a fake suggestions repository**
+- [x] **Step 1: Extend the project-router fixture with a fake suggestions repository**
 
 In `apps/api/tests/projects/test_router.py`, import `ServiceUnavailable` and `get_repository`, then add:
 
@@ -498,7 +498,7 @@ def make_client(tmp_path, suggestions=None) -> tuple[TestClient, ProjectReposito
     return TestClient(app), repository
 ```
 
-- [ ] **Step 2: Write failing endpoint tests**
+- [x] **Step 2: Write failing endpoint tests**
 
 Append:
 
@@ -552,7 +552,7 @@ def test_project_qa_suggestions_map_graph_outage_to_503(tmp_path):
     assert response.json()["detail"]["code"] == "GRAPH_UNAVAILABLE"
 ```
 
-- [ ] **Step 3: Run the endpoint tests and verify 404 failures for the new route**
+- [x] **Step 3: Run the endpoint tests and verify 404 failures for the new route**
 
 Run:
 
@@ -563,7 +563,7 @@ pytest tests/projects/test_router.py -q
 
 Expected: the four new tests fail because `/qa-suggestions` is not registered.
 
-- [ ] **Step 4: Add the endpoint before the generic project GET route**
+- [x] **Step 4: Add the endpoint before the generic project GET route**
 
 In `apps/api/src/app/projects/router.py`, import:
 
@@ -599,7 +599,7 @@ def project_qa_suggestions(
 
 Do not add `require_ready_admin`; this is the read-only public endpoint specified in the design.
 
-- [ ] **Step 5: Run endpoint and QA suites**
+- [x] **Step 5: Run endpoint and QA suites**
 
 Append this integration check to `apps/api/tests/qa/test_live_api.py`; it remains guarded by the file's existing `RUN_NEO4J_INTEGRATION=1` marker:
 
@@ -635,7 +635,7 @@ pytest tests/projects/test_router.py tests/qa -q
 
 Expected: all selected tests pass; live tests are skipped unless `RUN_NEO4J_INTEGRATION=1` is explicitly enabled. When Neo4j is available, also run `RUN_NEO4J_INTEGRATION=1 pytest tests/qa/test_live_api.py -q` and expect all live QA tests to pass.
 
-- [ ] **Step 6: Commit the endpoint**
+- [x] **Step 6: Commit the endpoint**
 
 ```bash
 git add apps/api/src/app/projects/router.py apps/api/tests/projects/test_router.py apps/api/tests/qa/test_live_api.py
@@ -655,7 +655,7 @@ git commit -m "feat: expose project QA suggestions"
 - Consumes: `GET /api/projects/{project_id}/qa-suggestions` from Task 3 and the existing `ProjectContext` (`projects`, `projectId`).
 - Produces: `getQaSuggestions(projectId: string, signal?: AbortSignal): Promise<QaSuggestionsResponse>` and a remount-on-project-change Ask UI.
 
-- [ ] **Step 1: Replace hard-coded-sample tests with dynamic-project tests**
+- [x] **Step 1: Replace hard-coded-sample tests with dynamic-project tests**
 
 Rewrite `apps/web/src/features/ask/AskPage.test.tsx` around a reusable fetch mock. The key assertions must include:
 
@@ -833,7 +833,7 @@ it('submits a dynamic attribute question and renders evidence', async () => {
 })
 ```
 
-- [ ] **Step 2: Run Ask-page tests and verify failures against the hard-coded UI**
+- [x] **Step 2: Run Ask-page tests and verify failures against the hard-coded UI**
 
 Run:
 
@@ -844,7 +844,7 @@ npm test -- --run src/features/ask/AskPage.test.tsx
 
 Expected: tests fail because the label and sample questions are still hard-coded and no suggestions request is made.
 
-- [ ] **Step 3: Add TypeScript contracts and the abortable client helper**
+- [x] **Step 3: Add TypeScript contracts and the abortable client helper**
 
 Add to `apps/web/src/api/client.ts`:
 
@@ -871,7 +871,7 @@ export function getQaSuggestions(projectId: string, signal?: AbortSignal) {
 }
 ```
 
-- [ ] **Step 4: Refactor AskPage into a project-keyed wrapper and abortable body**
+- [x] **Step 4: Refactor AskPage into a project-keyed wrapper and abortable body**
 
 In `apps/web/src/features/ask/AskPage.tsx`, remove the `samples` constant. Keep the answer rendering markup, but structure state ownership as follows:
 
@@ -999,7 +999,7 @@ function AskProjectPage({ projectId, projectTitle }: { projectId: string; projec
 
 Using `key={projectId}` is mandatory: it synchronously discards the previous project's input, answer, details, errors, and request lifecycle before the next paint, instead of relying only on a post-render effect reset.
 
-- [ ] **Step 5: Run Ask-page tests and TypeScript checks**
+- [x] **Step 5: Run Ask-page tests and TypeScript checks**
 
 Run:
 
@@ -1011,7 +1011,7 @@ npm run typecheck
 
 Expected: all Ask-page tests pass and TypeScript exits with code 0.
 
-- [ ] **Step 6: Run the complete regression gate**
+- [x] **Step 6: Run the complete regression gate**
 
 Run:
 
@@ -1025,7 +1025,7 @@ npm run build
 
 Expected: all selected backend tests, all frontend tests, and the production build pass. If the repository-wide backend suite is also run, record the already-known sandbox-only Neo4j failure separately rather than hiding it.
 
-- [ ] **Step 7: Commit the frontend behavior**
+- [x] **Step 7: Commit the frontend behavior**
 
 ```bash
 git add apps/web/src/api/client.ts apps/web/src/features/ask/AskPage.tsx apps/web/src/features/ask/AskPage.test.tsx
@@ -1036,8 +1036,8 @@ git commit -m "fix: make Ask page project aware"
 
 ## Final Review Gate
 
-- [ ] Run `git diff --check origin/master...HEAD` and confirm no whitespace errors.
-- [ ] Run `rg -n "向《笑傲江湖》|const samples|令狐冲的师父" apps/web/src/features/ask` and confirm production code has no hard-coded project/sample copy.
-- [ ] Confirm `GET /api/projects/{project_id}/qa-suggestions` is unauthenticated and read-only.
-- [ ] Confirm every returned suggestion can be parsed by `parse_local_intent` and answered from at least one evidence-backed fact or attribute.
-- [ ] Confirm the worktree is clean after all commits.
+- [x] Run `git diff --check origin/master...HEAD` and confirm no whitespace errors.
+- [x] Run `rg -n "向《笑傲江湖》|const samples|令狐冲的师父" apps/web/src/features/ask` and confirm production code has no hard-coded project/sample copy.
+- [x] Confirm `GET /api/projects/{project_id}/qa-suggestions` is unauthenticated and read-only.
+- [x] Confirm every returned suggestion can be parsed by `parse_local_intent` and answered from at least one evidence-backed fact or attribute.
+- [x] Confirm the worktree is clean after all commits.

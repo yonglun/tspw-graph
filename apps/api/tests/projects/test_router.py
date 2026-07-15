@@ -2,11 +2,13 @@ from io import BytesIO
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from neo4j.exceptions import ServiceUnavailable
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 from app.auth.dependencies import require_ready_admin
 from app.auth.models import AdminAccount
+from app.graph.router import get_repository
 from app.projects.files import UploadStore
 from app.projects.repository import ProjectRepository
 from app.projects.router import get_project_service, router
@@ -20,7 +22,18 @@ class FakeGraphWriter:
         return None
 
 
-def make_client(tmp_path) -> tuple[TestClient, ProjectRepository]:
+class FakeSuggestionRepository:
+    def __init__(self, candidate=None, error: Exception | None = None) -> None:
+        self.candidate = candidate
+        self.error = error
+
+    def qa_suggestion_candidate(self, project_id: str):
+        if self.error is not None:
+            raise self.error
+        return self.candidate
+
+
+def make_client(tmp_path, suggestions=None) -> tuple[TestClient, ProjectRepository]:
     repository = ProjectRepository(
         create_engine(
             "sqlite+pysqlite:///:memory:",
@@ -34,6 +47,9 @@ def make_client(tmp_path) -> tuple[TestClient, ProjectRepository]:
         title="测试小说", filename="book.txt", stream=BytesIO(b"text")
     )
     service = ProjectService(repository, uploads, FakeGraphWriter())
+    suggestion_repository = (
+        suggestions if suggestions is not None else FakeSuggestionRepository()
+    )
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[require_ready_admin] = lambda: AdminAccount(
@@ -46,6 +62,7 @@ def make_client(tmp_path) -> tuple[TestClient, ProjectRepository]:
     app.dependency_overrides[get_job_repository] = lambda: JobRepository(
         repository.engine
     )
+    app.dependency_overrides[get_repository] = lambda: suggestion_repository
     return TestClient(app), repository
 
 
@@ -95,3 +112,55 @@ def test_upload_rejects_unknown_profile_and_wrong_type(tmp_path):
         files={"file": ("upload.pdf", b"text", "application/pdf")},
     )
     assert wrong_type.status_code == 415
+
+
+def test_project_qa_suggestions_use_project_title_and_graph_candidate(tmp_path):
+    graph = FakeSuggestionRepository(
+        {
+            "entity": {"id": "chen", "name": "陈家洛", "type": "Person"},
+            "relation_capabilities": ["MEMBER_OF"],
+            "property_capabilities": ["gender"],
+        }
+    )
+    client, repository = make_client(tmp_path, graph)
+    project = next(item for item in repository.list_projects() if not item.is_builtin)
+
+    response = client.get(f"/api/projects/{project.id}/qa-suggestions")
+
+    assert response.status_code == 200
+    assert response.json()["project_title"] == "测试小说"
+    assert [item["question"] for item in response.json()["suggestions"]] == [
+        "陈家洛属于哪个门派？",
+        "陈家洛的性别是什么？",
+    ]
+
+
+def test_project_qa_suggestions_return_empty_for_empty_graph(tmp_path):
+    client, repository = make_client(tmp_path)
+    project = next(item for item in repository.list_projects() if not item.is_builtin)
+
+    response = client.get(f"/api/projects/{project.id}/qa-suggestions")
+
+    assert response.status_code == 200
+    assert response.json()["representative_entity"] is None
+    assert response.json()["suggestions"] == []
+
+
+def test_project_qa_suggestions_report_missing_project(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/api/projects/missing/qa-suggestions")
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "PROJECT_NOT_FOUND"
+
+
+def test_project_qa_suggestions_map_graph_outage_to_503(tmp_path):
+    graph = FakeSuggestionRepository(error=ServiceUnavailable("offline"))
+    client, repository = make_client(tmp_path, graph)
+    project = next(item for item in repository.list_projects() if not item.is_builtin)
+
+    response = client.get(f"/api/projects/{project.id}/qa-suggestions")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "GRAPH_UNAVAILABLE"

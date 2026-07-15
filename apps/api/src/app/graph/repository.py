@@ -300,6 +300,96 @@ class Neo4jGraphRepository:
                 "rows": record["rows"],
             }
 
+    def qa_suggestion_candidate(self, project_id: str) -> dict[str, Any] | None:
+        supported_properties = [
+            "gender",
+            "identity",
+            "honorific",
+            "life_status",
+            "activity_region",
+            "region",
+            "characteristic",
+        ]
+        statement = """
+            MATCH (person:Entity {project_id: $project_id, type: 'Person'})
+            WHERE coalesce(person.review_status, 'ACCEPTED') <> 'MERGED'
+            CALL {
+                WITH person
+                OPTIONAL MATCH (fact:Fact {project_id: $project_id})-[:TARGET]->(person)
+                WHERE fact.type = 'MASTER_OF'
+                  AND coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
+                OPTIONAL MATCH (fact)-[:SOURCE]->(source:Entity {project_id: $project_id})
+                OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence {project_id: $project_id})
+                WHERE coalesce(source.review_status, 'ACCEPTED') <> 'MERGED'
+                RETURN collect(DISTINCT CASE WHEN evidence IS NOT NULL THEN fact END) AS master_facts
+            }
+            CALL {
+                WITH person
+                OPTIONAL MATCH (fact:Fact {project_id: $project_id})-[:SOURCE]->(person)
+                WHERE fact.type = 'MEMBER_OF'
+                  AND coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
+                OPTIONAL MATCH (fact)-[:TARGET]->(target:Entity {project_id: $project_id})
+                OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence {project_id: $project_id})
+                WHERE coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
+                RETURN collect(DISTINCT CASE WHEN evidence IS NOT NULL THEN fact END) AS member_facts
+            }
+            CALL {
+                WITH person
+                OPTIONAL MATCH (fact:Fact {project_id: $project_id})-[:SOURCE]->(person)
+                WHERE fact.type = 'KNOWS'
+                  AND coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
+                OPTIONAL MATCH (fact)-[:TARGET]->(target:Entity {project_id: $project_id})
+                OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence {project_id: $project_id})
+                WHERE coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
+                RETURN collect(DISTINCT CASE WHEN evidence IS NOT NULL THEN fact END) AS knows_facts
+            }
+            CALL {
+                WITH person
+                OPTIONAL MATCH (person)-[:HAS_ATTRIBUTE]->(attribute:AttributeAssertion {project_id: $project_id})
+                WHERE attribute.property_id IN $supported_properties
+                  AND trim(toString(attribute.value)) <> ''
+                OPTIONAL MATCH (attribute)-[:EVIDENCED_BY]->(evidence:Evidence {project_id: $project_id})
+                WITH attribute, count(DISTINCT evidence) AS evidence_count
+                WHERE attribute IS NOT NULL AND evidence_count > 0
+                RETURN collect(DISTINCT attribute) AS attributes
+            }
+            WITH person, master_facts, member_facts, knows_facts, attributes,
+                size(master_facts) + size(member_facts) + size(knows_facts) AS relationship_count,
+                size(attributes) AS attribute_count
+            WITH person, relationship_count, attribute_count,
+                [capability IN [
+                    CASE WHEN size(master_facts) > 0 THEN 'MASTER_OF' END,
+                    CASE WHEN size(member_facts) > 0 THEN 'MEMBER_OF' END,
+                    CASE WHEN size(knows_facts) > 0 THEN 'KNOWS' END
+                ] WHERE capability IS NOT NULL] AS relation_capabilities,
+                [property_id IN $supported_properties
+                    WHERE any(attribute IN attributes
+                        WHERE attribute.property_id = property_id)] AS property_capabilities
+            WHERE relationship_count > 0 OR attribute_count > 0
+            RETURN properties(person) AS entity,
+                relation_capabilities,
+                property_capabilities
+            ORDER BY relationship_count DESC,
+                attribute_count DESC,
+                size(relation_capabilities) + size(property_capabilities) DESC,
+                person.name,
+                person.id
+            LIMIT 1
+        """
+        with self.driver.session() as session:
+            record = session.run(
+                statement,
+                project_id=project_id,
+                supported_properties=supported_properties,
+            ).single()
+            if record is None:
+                return None
+            return {
+                "entity": record["entity"],
+                "relation_capabilities": record["relation_capabilities"],
+                "property_capabilities": record["property_capabilities"],
+            }
+
     def relation_detail(self, project_id: str, relation_id: str) -> dict[str, Any] | None:
         statement = """
             MATCH (fact:Fact {project_id: $project_id, id: $relation_id})

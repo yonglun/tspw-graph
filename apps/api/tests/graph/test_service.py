@@ -543,3 +543,46 @@ def test_timeline_detail_query_returns_none_for_unknown_event() -> None:
     repository = Neo4jGraphRepository(FakeDriver(FakeSession(None)))
 
     assert repository.timeline_detail("p-1", "missing") is None
+
+
+def test_qa_suggestion_candidate_is_project_scoped_evidence_backed_and_bounded() -> None:
+    record = {
+        "entity": {
+            "id": "chen",
+            "project_id": "p-1",
+            "type": "Person",
+            "name": "陈家洛",
+        },
+        "relation_capabilities": ["MEMBER_OF", "KNOWS"],
+        "property_capabilities": ["gender"],
+    }
+    session = FakeSession(record)
+    repository = Neo4jGraphRepository(FakeDriver(session))
+
+    result = repository.qa_suggestion_candidate("p-1")
+
+    assert result == record
+    assert session.parameters == {
+        "project_id": "p-1",
+        "supported_properties": [
+            "gender",
+            "identity",
+            "honorific",
+            "life_status",
+            "activity_region",
+            "region",
+            "characteristic",
+        ],
+    }
+    assert "person:Entity {project_id: $project_id, type: 'Person'}" in session.statement
+    assert session.statement.count("EVIDENCED_BY") >= 4
+    assert "coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'" in session.statement
+    assert "coalesce(person.review_status, 'ACCEPTED') <> 'MERGED'" in session.statement
+    assert "ORDER BY relationship_count DESC" in session.statement
+    assert "LIMIT 1" in session.statement
+
+
+def test_qa_suggestion_candidate_returns_none_for_empty_project() -> None:
+    repository = Neo4jGraphRepository(FakeDriver(FakeSession(None)))
+
+    assert repository.qa_suggestion_candidate("empty") is None

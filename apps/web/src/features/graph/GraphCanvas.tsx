@@ -46,5 +46,27 @@ export function GraphCanvas({
     cy.on('tap', 'edge', event => onSelectEdge(event.target.id()))
     return () => cy.destroy()
   }, [centerId, graph, onSelect, onSelectEdge, selectedRelationId])
-  return <div ref={ref} className="graph-canvas" aria-label="知识图谱画布">{graph.nodes.length === 0 && <div className="canvas-empty" role="status"><span className="canvas-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="7" cy="12" r="3" /><circle cx="18" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="m10 11 6-4M10 13l6 4" /></svg></span><h2>从一个人物开始</h2><p>在上方搜索并选择实体。图谱会先展开一度邻居，再由你决定是否继续探索。</p><span className="canvas-empty-path">搜索 → 选择实体 → 展开关系</span></div>}<ul className="graph-node-list" aria-label="图谱节点">{graph.nodes.map(node => <li key={node.id}>{node.name}</li>)}</ul></div>
+  return (
+    <div className="graph-canvas" aria-label="知识图谱画布">
+      <div ref={ref} className="graph-renderer" data-testid="graph-renderer" />
+      {graph.nodes.length === 0 && (
+        <div className="canvas-empty" role="status">
+          <span className="canvas-empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="7" cy="12" r="3" />
+              <circle cx="18" cy="6" r="2" />
+              <circle cx="18" cy="18" r="2" />
+              <path d="m10 11 6-4M10 13l6 4" />
+            </svg>
+          </span>
+          <h2>从一个人物开始</h2>
+          <p>在上方搜索并选择实体。图谱会先展开一度邻居，再由你决定是否继续探索。</p>
+          <span className="canvas-empty-path">搜索 → 选择实体 → 展开关系</span>
+        </div>
+      )}
+      <ul className="graph-node-list" aria-label="图谱节点">
+        {graph.nodes.map(node => <li key={node.id}>{node.name}</li>)}
+      </ul>
+    </div>
+  )
 }

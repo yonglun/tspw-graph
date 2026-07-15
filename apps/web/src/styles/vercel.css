@@ -1051,6 +1051,7 @@ select:focus-visible {
 }
 
 .graph-canvas {
+  position: relative;
   min-width: 0;
   min-height: 360px;
   background: var(--ds-background-elevated);
@@ -1058,15 +1059,38 @@ select:focus-visible {
 }
 
 .canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 32px;
   color: var(--ds-text-secondary);
+  text-align: center;
 }
 
-.canvas-empty b {
+.canvas-empty-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+  border-radius: 50%;
+  background: var(--ds-background-recessed);
+}
+.canvas-empty-icon svg { width: 24px; height: 24px; }
+
+.canvas-empty h2 {
+  margin: 0 0 8px;
   color: var(--ds-text-primary);
   font-family: inherit;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 500;
+  letter-spacing: -.3px;
 }
+
+.canvas-empty p { max-width: 420px; margin: 0 0 16px; color: var(--ds-text-secondary); font-size: 13px; line-height: 1.6; }
+.canvas-empty-path { padding: 5px 9px; border-radius: 999px; background: var(--ds-background-recessed); color: var(--ds-text-secondary); font: 11px Geist Mono, ui-monospace, monospace; }
 
 .entity-panel {
   width: auto;
@@ -1248,6 +1272,9 @@ select:focus-visible {
   color: var(--ds-text-secondary);
   font-weight: 400;
 }
+
+.graph-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.graph-legend-dot { width: 10px; height: 10px; display: inline-block; flex: 0 0 10px; border-radius: 50%; background: var(--legend-color); box-shadow: 0 0 0 1px rgb(0 0 0 / 8%); }
 
 .text-button {
   padding: 4px 8px;

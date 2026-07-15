@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.graph.models import EvidenceDetail
@@ -22,3 +24,22 @@ class AskResponse(BaseModel):
     parameters: dict[str, str]
     evidence: list[EvidenceDetail] = Field(default_factory=list)
 
+
+class QaRepresentativeEntity(BaseModel):
+    id: str
+    name: str
+    type: str
+
+
+class QaSuggestion(BaseModel):
+    id: str
+    question: str
+    kind: Literal["relation", "attribute"]
+    capability: str
+
+
+class QaSuggestionsResponse(BaseModel):
+    project_id: str
+    project_title: str
+    representative_entity: QaRepresentativeEntity | None = None
+    suggestions: list[QaSuggestion] = Field(default_factory=list)

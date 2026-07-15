@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from app.auth.dependencies import require_ready_admin
 from app.auth.models import AdminAccount
 from app.graph.neo4j import Neo4jGraphWriter
+from app.graph.router import Repository, execute
 from app.jobs.models import JobKind
 from app.jobs.repository import JobRepository
 from app.jobs.router import JobSnapshot
@@ -20,6 +21,8 @@ from app.projects.service import (
     ProjectService,
     ProjectUploadService,
 )
+from app.qa.models import QaSuggestionsResponse
+from app.qa.suggestions import QaSuggestionService
 from app.settings import get_settings
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -156,6 +159,27 @@ def create_attribute_job(
 @router.get("", response_model=list[ProjectSummary])
 def list_projects(service: Service) -> list[ProjectSummary]:
     return [ProjectSummary.model_validate(project) for project in service.list()]
+
+
+@router.get(
+    "/{project_id}/qa-suggestions",
+    response_model=QaSuggestionsResponse,
+)
+def project_qa_suggestions(
+    project_id: str,
+    service: Service,
+    repository: Repository,
+) -> QaSuggestionsResponse:
+    try:
+        project = service.get(project_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "PROJECT_NOT_FOUND"},
+        ) from error
+    return execute(
+        lambda: QaSuggestionService(repository).suggest(project.id, project.title)
+    )
 
 
 @router.get("/{project_id}", response_model=ProjectSummary)

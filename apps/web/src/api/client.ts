@@ -125,6 +125,18 @@ export type AskResponse = {
 }
 
 export type ProjectSummary = { id: string; title: string; is_builtin: boolean; source_encoding?: string; source_size?: number; created_at: string; updated_at: string }
+export type QaSuggestion = {
+  id: string
+  question: string
+  kind: 'relation' | 'attribute'
+  capability: string
+}
+export type QaSuggestionsResponse = {
+  project_id: string
+  project_title: string
+  representative_entity: { id: string; name: string; type: string } | null
+  suggestions: QaSuggestion[]
+}
 export type ModelProfile = { id: string; provider: string; base_url: string; model: string; timeout_seconds: number; available: boolean }
 export type JobKind = 'FULL_BUILD' | 'ATTRIBUTE_BACKFILL'
 export type JobSnapshot = { id: string; project_id: string; model_profile_id: string; kind?: JobKind; status: string; completed_chunks: number; total_chunks: number; error_code?: string }
@@ -217,6 +229,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 export function getTimelineDetail(projectId: string, eventId: string, signal?: AbortSignal) {
   return apiFetch<TimelineEventDetail>(
     `/api/graph/timeline/${encodeURIComponent(eventId)}?project_id=${encodeURIComponent(projectId)}`,
+    { signal },
+  )
+}
+
+export function getQaSuggestions(projectId: string, signal?: AbortSignal) {
+  return apiFetch<QaSuggestionsResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/qa-suggestions`,
     { signal },
   )
 }

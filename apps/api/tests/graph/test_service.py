@@ -509,3 +509,37 @@ def test_relation_detail_query_aggregates_evidence_before_returning_relation() -
     assert result == relation
     assert "WITH fact, source, target, collect(DISTINCT" in session.statement
     assert "evidence: [item IN evidence_rows WHERE item.id IS NOT NULL]" in session.statement
+
+
+def test_timeline_detail_query_is_project_scoped_and_bounded() -> None:
+    event = timeline_entity("event-1", "Event", "思过崖传剑")
+    session = FakeSession(
+        {
+            "event": event,
+            "chapter_number": 10,
+            "participants": [],
+            "evidence": [],
+            "relationships": [],
+        }
+    )
+    repository = Neo4jGraphRepository(FakeDriver(session))
+
+    result = repository.timeline_detail("p-1", "event-1")
+
+    assert result == {
+        "event": event,
+        "chapter_number": 10,
+        "participants": [],
+        "evidence": [],
+        "relationships": [],
+    }
+    assert "event.type IN ['Event', 'TeachingEvent']" in session.statement
+    assert "participant.type = 'Person'" in session.statement
+    assert "coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'" in session.statement
+    assert session.parameters == {"project_id": "p-1", "event_id": "event-1"}
+
+
+def test_timeline_detail_query_returns_none_for_unknown_event() -> None:
+    repository = Neo4jGraphRepository(FakeDriver(FakeSession(None)))
+
+    assert repository.timeline_detail("p-1", "missing") is None

@@ -187,6 +187,54 @@ def test_relation_detail_returns_not_found_for_missing_relation() -> None:
     assert response.json()["detail"]["code"] == "ENTITY_NOT_FOUND"
 
 
+def test_timeline_detail_serializes_classified_relationship_states() -> None:
+    class Repository:
+        def timeline_detail(self, project_id: str, event_id: str):
+            person = {"id": "linghu", "project_id": project_id, "type": "Person", "name": "令狐冲", "aliases": [], "description": ""}
+            return {
+                "event": {"id": event_id, "project_id": project_id, "type": "Event", "name": "思过崖传剑", "aliases": [], "description": ""},
+                "chapter_number": 10,
+                "participants": [person],
+                "evidence": [],
+                "relationships": [{
+                    "id": "fact-knows",
+                    "type": "KNOWS",
+                    "source": person,
+                    "target": {"id": "dugu", "project_id": project_id, "type": "Swordplay", "name": "独孤九剑", "aliases": [], "description": ""},
+                    "from_chapter": 10,
+                    "to_chapter": None,
+                }],
+            }
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        response = TestClient(app).get(
+            "/api/graph/timeline/event-1", params={"project_id": "p-1"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+    assert response.status_code == 200
+    assert response.json()["relationship_states"]["started"][0]["label"] == "掌握"
+
+
+def test_timeline_detail_returns_not_found_for_missing_event() -> None:
+    class Repository:
+        def timeline_detail(self, project_id: str, event_id: str):
+            return None
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        response = TestClient(app).get(
+            "/api/graph/timeline/missing", params={"project_id": "p-1"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "ENTITY_NOT_FOUND"
+
+
 def test_app_lifespan_reuses_and_closes_one_neo4j_driver() -> None:
     driver = Mock()
 

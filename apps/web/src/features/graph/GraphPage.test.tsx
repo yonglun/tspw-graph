@@ -23,8 +23,12 @@ const readyAuth: AuthValue = {
   refreshSession: async () => undefined,
 }
 
-function renderGraph() {
-  return render(<AuthContext.Provider value={readyAuth}><GraphPage /></AuthContext.Provider>)
+function renderGraph(initialEntry = '/graph') {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <AuthContext.Provider value={readyAuth}><GraphPage /></AuthContext.Provider>
+    </MemoryRouter>,
+  )
 }
 
 function deferredResponse<T>() {
@@ -52,6 +56,23 @@ describe('GraphPage', () => {
     expect(screen.getByRole('heading', { name: '从一个人物开始' })).toBeVisible()
     expect(screen.getByText('搜索 → 选择实体 → 展开关系')).toBeVisible()
     expect(screen.getByRole('status')).toHaveClass('canvas-empty')
+  })
+
+  it('hydrates an entity neighborhood from the entity query parameter', async () => {
+    const event = { id: 'teaching', project_id: 'xiaoao', type: 'TeachingEvent', name: '思過崖傳劍', aliases: [], description: '风清扬传剑' }
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/entities/teaching')) return new Response(JSON.stringify({ ...event, facts: [] }))
+      if (url.includes('/api/graph/neighborhood')) return new Response(JSON.stringify({ nodes: [event, entity], edges: [] }))
+      return new Response(JSON.stringify([]))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderGraph('/graph?project=xiaoao&entity=teaching')
+
+    expect(await screen.findByRole('heading', { name: '思過崖傳劍' })).toBeVisible()
+    expect(await screen.findByText('令狐沖')).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/entities/teaching'), expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
   it('searches and opens an entity with evidence', async () => {

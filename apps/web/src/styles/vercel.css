@@ -1023,6 +1023,29 @@ select:focus-visible {
 .timeline-evidence blockquote p { margin: 0; font-size: 13px; line-height: 20px; }
 .timeline-evidence blockquote footer { margin-top: 6px; color: var(--ds-text-muted); font-size: 11px; }
 
+.timeline-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.timeline-detail-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--ds-radius);
+  background: var(--ds-text-primary);
+  color: var(--ds-background-elevated);
+  box-shadow: var(--ds-shadow-border);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.timeline-detail-actions button:focus-visible {
+  outline: 0;
+  box-shadow: var(--ds-focus-ring);
+}
+
 .timeline-detail-status {
   margin: 0;
   padding: 18px 24px;

@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 
 import { StoryPage } from './StoryPage'
 
@@ -42,6 +43,20 @@ function mockFetch(options: { failDetailOnce?: boolean } = {}) {
   return fetchMock
 }
 
+function LocationProbe() {
+  const location = useLocation()
+  return <output aria-label="location">{location.pathname}{location.search}</output>
+}
+
+function renderStory(withLocation = false) {
+  return render(
+    <MemoryRouter initialEntries={['/story?project=xiaoao']}>
+      <StoryPage />
+      {withLocation && <LocationProbe />}
+    </MemoryRouter>,
+  )
+}
+
 describe('StoryPage', () => {
   afterEach(() => {
     cleanup()
@@ -51,7 +66,7 @@ describe('StoryPage', () => {
   it('expands an event with participants, temporal relationship groups, and evidence', async () => {
     mockFetch()
     const user = userEvent.setup()
-    render(<StoryPage />)
+    renderStory()
 
     const trigger = await screen.findByRole('button', { name: /思過崖傳劍/ })
     await user.click(trigger)
@@ -67,7 +82,7 @@ describe('StoryPage', () => {
   it('keeps only one event expanded', async () => {
     mockFetch()
     const user = userEvent.setup()
-    render(<StoryPage />)
+    renderStory()
 
     const first = await screen.findByRole('button', { name: /思過崖傳劍/ })
     const second = screen.getByRole('button', { name: /五霸岡聚會/ })
@@ -82,7 +97,7 @@ describe('StoryPage', () => {
   it('reuses cached detail after collapsing and reopening', async () => {
     const fetchMock = mockFetch()
     const user = userEvent.setup()
-    render(<StoryPage />)
+    renderStory()
 
     const trigger = await screen.findByRole('button', { name: /思過崖傳劍/ })
     await user.click(trigger)
@@ -96,7 +111,7 @@ describe('StoryPage', () => {
   it('shows an inline error and retries event detail', async () => {
     const fetchMock = mockFetch({ failDetailOnce: true })
     const user = userEvent.setup()
-    render(<StoryPage />)
+    renderStory()
 
     await user.click(await screen.findByRole('button', { name: /思過崖傳劍/ }))
     expect(await screen.findByText('详情加载失败')).toBeVisible()
@@ -109,7 +124,7 @@ describe('StoryPage', () => {
   it('collapses the selected event when the person filter changes', async () => {
     mockFetch()
     const user = userEvent.setup()
-    render(<StoryPage />)
+    renderStory()
 
     const trigger = await screen.findByRole('button', { name: /思過崖傳劍/ })
     await user.click(trigger)
@@ -117,5 +132,17 @@ describe('StoryPage', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: '人物' }), 'linghu')
 
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
+  })
+
+  it('opens the selected event in its graph neighborhood', async () => {
+    mockFetch()
+    const user = userEvent.setup()
+    renderStory(true)
+
+    await user.click(await screen.findByRole('button', { name: /思過崖傳劍/ }))
+    await screen.findByText('风清扬传剑')
+    await user.click(screen.getByRole('button', { name: '在图谱中查看' }))
+
+    expect(screen.getByLabelText('location')).toHaveTextContent('/graph?project=xiaoao&entity=teaching')
   })
 })

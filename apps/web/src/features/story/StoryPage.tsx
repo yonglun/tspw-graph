@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import {
   apiFetch,
@@ -42,7 +43,7 @@ function RelationshipStateGroup({ title, tone, items, emptyText }: RelationshipS
   )
 }
 
-function EventDetail({ detail }: { detail: TimelineEventDetail }) {
+function EventDetail({ detail, onViewGraph }: { detail: TimelineEventDetail; onViewGraph: () => void }) {
   return (
     <div className="timeline-event-detail">
       <section className="timeline-detail-section" aria-labelledby={`participants-${detail.event.id}`}>
@@ -69,6 +70,9 @@ function EventDetail({ detail }: { detail: TimelineEventDetail }) {
           </blockquote>
         )) : <p className="timeline-state-empty">暂无原文证据</p>}
       </section>
+      <div className="timeline-detail-actions">
+        <button type="button" onClick={onViewGraph}>在图谱中查看</button>
+      </div>
     </div>
   )
 }
@@ -80,6 +84,7 @@ function errorMessage(error: unknown) {
 
 export function StoryPage() {
   const { projectId } = useProject()
+  const navigate = useNavigate()
   const [people, setPeople] = useState<EntitySummary[]>([])
   const [person, setPerson] = useState('')
   const [events, setEvents] = useState<TimelineItem[]>([])
@@ -169,7 +174,12 @@ export function StoryPage() {
                         <button type="button" onClick={() => void toggleEvent(item.event.id, true)}>重试</button>
                       </div>
                     )}
-                    {details[item.event.id] && detailLoading !== item.event.id && <EventDetail detail={details[item.event.id]} />}
+                    {details[item.event.id] && detailLoading !== item.event.id && (
+                      <EventDetail
+                        detail={details[item.event.id]}
+                        onViewGraph={() => navigate({ pathname: '/graph', search: `?project=${encodeURIComponent(projectId)}&entity=${encodeURIComponent(item.event.id)}` })}
+                      />
+                    )}
                   </div>
                 )}
               </article>

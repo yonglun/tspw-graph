@@ -1,4 +1,5 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { apiFetch, type EntityDetail, type EntitySummary, type Neighborhood, type RelationEvidence } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
@@ -11,6 +12,8 @@ const EMPTY_GRAPH: Neighborhood = { nodes: [], edges: [] }
 
 export function GraphPage() {
   const { projectId } = useProject()
+  const [searchParams] = useSearchParams()
+  const entityId = searchParams.get('entity') ?? ''
   const auth = useAuth()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<EntitySummary[]>([])
@@ -26,6 +29,7 @@ export function GraphPage() {
   const [relationEvidenceLoading, setRelationEvidenceLoading] = useState(false)
   const graphRequest = useRef<AbortController | undefined>(undefined)
   const detailRequest = useRef<AbortController | undefined>(undefined)
+  const hydratedEntity = useRef<string | undefined>(undefined)
 
   const abortEntityRequests = useCallback(() => {
     graphRequest.current?.abort()
@@ -87,6 +91,25 @@ export function GraphPage() {
       .then(nextDetail => setDetail(nextDetail))
       .catch((e: Error) => { if (e.name !== 'AbortError') setError(e.message) })
   }, [abortEntityRequests, projectId])
+
+  useEffect(() => {
+    if (!projectId || !entityId) return
+    const hydrationKey = `${projectId}:${entityId}`
+    if (hydratedEntity.current === hydrationKey) return
+    hydratedEntity.current = hydrationKey
+    const controller = new AbortController()
+
+    void apiFetch<EntityDetail>(
+      `/api/entities/${encodeURIComponent(entityId)}?project_id=${encodeURIComponent(projectId)}`,
+      { signal: controller.signal },
+    )
+      .then((entity) => selectEntity(entity))
+      .catch((error: Error) => {
+        if (!controller.signal.aborted && error.name !== 'AbortError') setError(error.message)
+      })
+
+    return () => controller.abort()
+  }, [entityId, projectId, selectEntity])
 
   const selectEntityById = useCallback((id: string) => {
     const entity = graph.nodes.find(node => node.id === id)

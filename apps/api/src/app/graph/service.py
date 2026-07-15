@@ -10,6 +10,9 @@ from app.graph.models import (
     RelationSummary,
     RelatedFact,
     TimelineEvent,
+    TimelineEventDetail,
+    TimelineRelationship,
+    TimelineRelationshipStates,
 )
 from app.ontology.catalog import relation_by_id
 from app.ontology.models import EntityType
@@ -231,3 +234,70 @@ class GraphService:
                 project_id, person_id, from_chapter, to_chapter, limit
             )
         ]
+
+    def timeline_detail(
+        self, project_id: str, event_id: str
+    ) -> TimelineEventDetail:
+        result = self.repository.timeline_detail(project_id, event_id)
+        if result is None:
+            raise EntityNotFoundError(event_id)
+
+        event = EntitySummary.model_validate(result["event"])
+        participants = [
+            EntitySummary.model_validate(row)
+            for row in self._deduplicate(result.get("participants", []))
+        ]
+        chapter_number = result.get("chapter_number")
+        states = self._timeline_states(
+            result.get("relationships", []), chapter_number
+        )
+        return TimelineEventDetail(
+            event=event,
+            chapter_number=chapter_number,
+            participants=participants,
+            evidence=self._deduplicate_evidence(result.get("evidence", [])),
+            relationship_states=states,
+        )
+
+    @staticmethod
+    def _timeline_relationship(row: dict[str, Any]) -> TimelineRelationship:
+        relation = relation_by_id(row.get("type", ""))
+        return TimelineRelationship.model_validate(
+            {
+                **row,
+                "label": relation.label if relation else row.get("type", ""),
+            }
+        )
+
+    def _timeline_states(
+        self, rows: list[dict[str, Any]], chapter_number: int | None
+    ) -> TimelineRelationshipStates:
+        if chapter_number is None:
+            return TimelineRelationshipStates()
+
+        started: list[TimelineRelationship] = []
+        active: list[TimelineRelationship] = []
+        ended: list[TimelineRelationship] = []
+        seen: set[str] = set()
+        for row in rows:
+            fact_id = row.get("id")
+            if not isinstance(fact_id, str) or fact_id in seen:
+                continue
+            seen.add(fact_id)
+            from_chapter = row.get("from_chapter")
+            to_chapter = row.get("to_chapter")
+            relationship = self._timeline_relationship(row)
+            if from_chapter == chapter_number:
+                started.append(relationship)
+            elif to_chapter == chapter_number:
+                ended.append(relationship)
+            elif (
+                from_chapter is None or from_chapter < chapter_number
+            ) and (to_chapter is None or to_chapter > chapter_number):
+                active.append(relationship)
+
+        return TimelineRelationshipStates(
+            started=started,
+            active=active,
+            ended=ended,
+        )

@@ -185,3 +185,27 @@ class EntityDetail(EntitySummary):
 class TimelineEvent(BaseModel):
     event: EntitySummary
     chapter_number: int | None = None
+
+
+class TimelineRelationship(BaseModel):
+    id: str
+    type: str
+    label: str
+    source: EntitySummary
+    target: EntitySummary
+    from_chapter: int | None = None
+    to_chapter: int | None = None
+
+
+class TimelineRelationshipStates(BaseModel):
+    started: list[TimelineRelationship] = Field(default_factory=list)
+    active: list[TimelineRelationship] = Field(default_factory=list)
+    ended: list[TimelineRelationship] = Field(default_factory=list)
+
+
+class TimelineEventDetail(BaseModel):
+    event: EntitySummary
+    chapter_number: int | None = None
+    participants: list[EntitySummary] = Field(default_factory=list)
+    evidence: list[EvidenceDetail] = Field(default_factory=list)
+    relationship_states: TimelineRelationshipStates

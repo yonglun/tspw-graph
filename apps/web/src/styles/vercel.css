@@ -837,6 +837,17 @@ select:focus-visible {
   text-align: right;
 }
 
+.timeline > li.empty-state {
+  display: block;
+  margin-left: 144px;
+  padding: 24px;
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-background-elevated);
+  color: var(--ds-text-secondary);
+  box-shadow: var(--ds-shadow-border);
+  text-align: center;
+}
+
 .timeline-event {
   overflow: hidden;
   padding: 0;
@@ -1174,6 +1185,8 @@ select:focus-visible {
     padding-top: 0;
     text-align: left;
   }
+
+  .timeline > li.empty-state { margin-left: 0; }
 
   .timeline-state-grid { grid-template-columns: 1fr; }
 }

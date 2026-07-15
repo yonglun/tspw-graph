@@ -70,6 +70,28 @@ export type GraphEdge = {
 
 export type Neighborhood = { nodes: EntitySummary[]; edges: GraphEdge[] }
 
+export type TimelineRelationship = {
+  id: string
+  type: string
+  label: string
+  source: EntitySummary
+  target: EntitySummary
+  from_chapter?: number
+  to_chapter?: number
+}
+
+export type TimelineEventDetail = {
+  event: EntitySummary
+  chapter_number?: number
+  participants: EntitySummary[]
+  evidence: Evidence[]
+  relationship_states: {
+    started: TimelineRelationship[]
+    active: TimelineRelationship[]
+    ended: TimelineRelationship[]
+  }
+}
+
 export type OntologyCatalog = {
   entity_types: Array<{
     id: string
@@ -190,4 +212,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+export function getTimelineDetail(projectId: string, eventId: string, signal?: AbortSignal) {
+  return apiFetch<TimelineEventDetail>(
+    `/api/graph/timeline/${encodeURIComponent(eventId)}?project_id=${encodeURIComponent(projectId)}`,
+    { signal },
+  )
 }

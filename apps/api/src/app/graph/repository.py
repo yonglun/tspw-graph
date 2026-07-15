@@ -22,6 +22,10 @@ class GraphRepository(Protocol):
         self, project_id: str, relation_id: str
     ) -> dict[str, Any] | None: ...
 
+    def timeline_detail(
+        self, project_id: str, event_id: str
+    ) -> dict[str, Any] | None: ...
+
 
 class Neo4jGraphRepository:
     def __init__(self, driver: Driver) -> None:
@@ -371,6 +375,91 @@ class Neo4jGraphRepository:
                     limit=limit,
                 )
             ]
+
+    def timeline_detail(
+        self, project_id: str, event_id: str
+    ) -> dict[str, Any] | None:
+        statement = """
+            MATCH (event:Entity {project_id: $project_id, id: $event_id})
+            WHERE event.type IN ['Event', 'TeachingEvent']
+              AND coalesce(event.review_status, 'ACCEPTED') <> 'MERGED'
+            CALL {
+                WITH event
+                OPTIONAL MATCH (event)-[event_edge:RELATED]-(participant:Entity {project_id: $project_id})
+                WHERE participant.type = 'Person'
+                  AND coalesce(participant.review_status, 'ACCEPTED') <> 'MERGED'
+                  AND coalesce(event_edge.review_status, 'ACCEPTED') <> 'REJECTED'
+                RETURN min(event_edge.from_chapter) AS chapter_number,
+                    [item IN collect(DISTINCT participant) WHERE item IS NOT NULL | properties(item)] AS participants
+            }
+            CALL {
+                WITH event
+                OPTIONAL MATCH (event_fact:Fact {project_id: $project_id})-[:SOURCE|TARGET]->(event)
+                WHERE coalesce(event_fact.review_status, 'ACCEPTED') <> 'REJECTED'
+                OPTIONAL MATCH (event_fact)-[:EVIDENCED_BY]->(event_evidence:Evidence)
+                    -[:IN_CHAPTER]->(event_chapter:Chapter)
+                WITH event_evidence, event_chapter
+                ORDER BY event_chapter.number, event_evidence.start_offset
+                WITH collect(DISTINCT {
+                    id: event_evidence.id,
+                    chapter_id: event_chapter.id,
+                    chapter_number: event_chapter.number,
+                    chapter_title: event_chapter.title,
+                    start_offset: event_evidence.start_offset,
+                    end_offset: event_evidence.end_offset,
+                    quote: event_evidence.quote
+                }) AS evidence_rows
+                RETURN [item IN evidence_rows WHERE item.id IS NOT NULL] AS evidence
+            }
+            CALL {
+                WITH event
+                OPTIONAL MATCH (event)-[event_edge:RELATED]-(participant:Entity {project_id: $project_id})
+                WHERE participant.type = 'Person'
+                  AND coalesce(participant.review_status, 'ACCEPTED') <> 'MERGED'
+                  AND coalesce(event_edge.review_status, 'ACCEPTED') <> 'REJECTED'
+                WITH event, [item IN collect(DISTINCT participant.id) WHERE item IS NOT NULL] AS participant_ids
+                UNWIND participant_ids AS participant_id
+                MATCH (participant:Entity {project_id: $project_id, id: participant_id})
+                MATCH (fact:Fact {project_id: $project_id})-[:SOURCE|TARGET]->(participant)
+                MATCH (fact)-[:SOURCE]->(source:Entity {project_id: $project_id})
+                MATCH (fact)-[:TARGET]->(target:Entity {project_id: $project_id})
+                WHERE coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
+                  AND coalesce(source.review_status, 'ACCEPTED') <> 'MERGED'
+                  AND coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
+                  AND source.id <> event.id AND target.id <> event.id
+                WITH fact, source, target
+                ORDER BY fact.id
+                WITH collect(DISTINCT {
+                    id: fact.id,
+                    type: fact.type,
+                    source: properties(source),
+                    target: properties(target),
+                    from_chapter: fact.from_chapter,
+                    to_chapter: fact.to_chapter
+                }) AS relationship_rows
+                RETURN [item IN relationship_rows WHERE item.id IS NOT NULL] AS relationships
+            }
+            RETURN properties(event) AS event, chapter_number, participants, evidence, relationships
+        """
+        with self.driver.session() as session:
+            record = session.run(
+                statement, project_id=project_id, event_id=event_id
+            ).single()
+            if record is None:
+                return None
+            return {
+                "event": dict(record["event"]),
+                "chapter_number": record["chapter_number"],
+                "participants": [dict(item) for item in record["participants"]],
+                "evidence": [
+                    dict(item) for item in record["evidence"] if item.get("id")
+                ],
+                "relationships": [
+                    dict(item)
+                    for item in record["relationships"]
+                    if item.get("id")
+                ],
+            }
 
     def entity_exists(self, project_id: str, entity_id: str) -> bool:
         with self.driver.session() as session:

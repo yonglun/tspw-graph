@@ -1,4 +1,5 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { apiFetch, type EntityDetail, type EntitySummary, type Neighborhood, type RelationEvidence } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
@@ -11,6 +12,8 @@ const EMPTY_GRAPH: Neighborhood = { nodes: [], edges: [] }
 
 export function GraphPage() {
   const { projectId } = useProject()
+  const [searchParams] = useSearchParams()
+  const entityId = searchParams.get('entity') ?? ''
   const auth = useAuth()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<EntitySummary[]>([])
@@ -26,6 +29,7 @@ export function GraphPage() {
   const [relationEvidenceLoading, setRelationEvidenceLoading] = useState(false)
   const graphRequest = useRef<AbortController | undefined>(undefined)
   const detailRequest = useRef<AbortController | undefined>(undefined)
+  const hydratedEntity = useRef<string | undefined>(undefined)
 
   const abortEntityRequests = useCallback(() => {
     graphRequest.current?.abort()
@@ -88,6 +92,25 @@ export function GraphPage() {
       .catch((e: Error) => { if (e.name !== 'AbortError') setError(e.message) })
   }, [abortEntityRequests, projectId])
 
+  useEffect(() => {
+    if (!projectId || !entityId) return
+    const hydrationKey = `${projectId}:${entityId}`
+    if (hydratedEntity.current === hydrationKey) return
+    hydratedEntity.current = hydrationKey
+    const controller = new AbortController()
+
+    void apiFetch<EntityDetail>(
+      `/api/entities/${encodeURIComponent(entityId)}?project_id=${encodeURIComponent(projectId)}`,
+      { signal: controller.signal },
+    )
+      .then((entity) => selectEntity(entity))
+      .catch((error: Error) => {
+        if (!controller.signal.aborted && error.name !== 'AbortError') setError(error.message)
+      })
+
+    return () => controller.abort()
+  }, [entityId, projectId, selectEntity])
+
   const selectEntityById = useCallback((id: string) => {
     const entity = graph.nodes.find(node => node.id === id)
     if (entity) selectEntity(entity)
@@ -136,5 +159,5 @@ export function GraphPage() {
     setRelationEvidence(undefined)
   }, [])
 
-  return <section className="graph-page"><header className="graph-toolbar"><div><p className="eyebrow">GRAPH EXPLORER · 03</p><h1>沿关系，游江湖</h1></div><div className="search-wrap"><label htmlFor="graph-search">搜索人物、门派或武学</label><input id="graph-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="例如：令狐冲" />{results.length > 0 && <div className="search-results">{results.map(item => <button key={item.id} onClick={() => selectEntity(item)}><b>{item.name}</b><span>{item.type} · {item.description}</span></button>)}</div>}</div></header>{error && <div role="alert" className="error-state">{error}</div>}{relationEvidenceLoading && <div className="loading-state" role="status">正在加载关系证据…</div>}<div className="graph-workspace"><GraphCanvas graph={graph} centerId={selected?.id} selectedRelationId={selectedRelationId} onSelect={selectEntityById} onSelectEdge={selectRelation} /><EntityPanel detail={detail} onClose={() => { setDetail(undefined); setSelectedRelationId(undefined); setSelectedAttributeId(undefined); setRelationEvidence(undefined) }} onReviewFact={auth.status === 'ready' ? reviewFact : undefined} onSelectRelation={selectRelation} onSelectAttribute={selectAttribute} selectedRelationId={selectedRelationId} selectedAttributeId={selectedAttributeId} relationEvidence={relationEvidence} /></div><footer className="graph-legend">{visibleEntityTypeStyles(graph.nodes).map(type => <span key={type.label}><i style={{ '--legend-color': type.color } as CSSProperties} />{type.label}</span>)}{selected && graphDepth === 1 && !graphLoading && <button type="button" className="text-button" onClick={expandTwoHop}>展开二度关系</button>}<b>{graph.nodes.length} 节点 · {graph.edges.length} 关系</b></footer></section>
+  return <section className="graph-page"><header className="graph-toolbar"><div><p className="eyebrow">GRAPH EXPLORER · 03</p><h1>沿关系，游江湖</h1></div><div className="search-wrap"><label htmlFor="graph-search">搜索人物、门派或武学</label><input id="graph-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="例如：令狐冲" />{results.length > 0 && <div className="search-results">{results.map(item => <button key={item.id} onClick={() => selectEntity(item)}><b>{item.name}</b><span>{item.type} · {item.description}</span></button>)}</div>}</div></header>{error && <div role="alert" className="error-state">{error}</div>}{relationEvidenceLoading && <div className="loading-state" role="status">正在加载关系证据…</div>}<div className="graph-workspace"><GraphCanvas graph={graph} centerId={selected?.id} selectedRelationId={selectedRelationId} onSelect={selectEntityById} onSelectEdge={selectRelation} /><EntityPanel detail={detail} onClose={() => { setDetail(undefined); setSelectedRelationId(undefined); setSelectedAttributeId(undefined); setRelationEvidence(undefined) }} onReviewFact={auth.status === 'ready' ? reviewFact : undefined} onSelectRelation={selectRelation} onSelectAttribute={selectAttribute} selectedRelationId={selectedRelationId} selectedAttributeId={selectedAttributeId} relationEvidence={relationEvidence} /></div><footer className="graph-legend">{visibleEntityTypeStyles(graph.nodes).map(type => <span className="graph-legend-item" key={type.label}><i className="graph-legend-dot" data-testid={`legend-${type.label}`} aria-label={type.label} style={{ '--legend-color': type.color } as CSSProperties} />{type.label}</span>)}{selected && graphDepth === 1 && !graphLoading && <button type="button" className="text-button" onClick={expandTwoHop}>展开二度关系</button>}<b>{graph.nodes.length} 节点 · {graph.edges.length} 关系</b></footer></section>
 }

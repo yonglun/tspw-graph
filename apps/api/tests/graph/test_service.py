@@ -247,6 +247,90 @@ def test_missing_relation_detail_raises_not_found() -> None:
         GraphService(Repository()).relation_detail("p-1", "missing")
 
 
+def timeline_entity(entity_id: str, entity_type: str, name: str) -> dict:
+    return {
+        "id": entity_id,
+        "project_id": "p-1",
+        "type": entity_type,
+        "name": name,
+        "aliases": [],
+        "description": "",
+    }
+
+
+class TimelineDetailRepository:
+    def timeline_detail(self, project_id: str, event_id: str):
+        person = timeline_entity("linghu", "Person", "令狐冲")
+        return {
+            "event": timeline_entity(event_id, "Event", "思过崖传剑"),
+            "chapter_number": 10,
+            "participants": [person, person],
+            "evidence": [
+                {
+                    "id": "ev-1",
+                    "chapter_id": "c10",
+                    "chapter_number": 10,
+                    "chapter_title": "第十章",
+                    "start_offset": 1,
+                    "end_offset": 6,
+                    "quote": "风清扬传剑",
+                },
+                {
+                    "id": "ev-1",
+                    "chapter_id": "c10",
+                    "chapter_number": 10,
+                    "chapter_title": "第十章",
+                    "start_offset": 1,
+                    "end_offset": 6,
+                    "quote": "风清扬传剑",
+                },
+            ],
+            "relationships": [
+                {"id": "started", "type": "KNOWS", "source": person, "target": timeline_entity("dugu", "Swordplay", "独孤九剑"), "from_chapter": 10, "to_chapter": None},
+                {"id": "active", "type": "MEMBER_OF", "source": person, "target": timeline_entity("huashan", "Sect", "华山派"), "from_chapter": 1, "to_chapter": 20},
+                {"id": "ended", "type": "HOLDS", "source": person, "target": timeline_entity("qin", "Artifact", "短琴"), "from_chapter": 2, "to_chapter": 10},
+                {"id": "timeless", "type": "MASTER_OF", "source": timeline_entity("feng", "Person", "风清扬"), "target": person, "from_chapter": None, "to_chapter": None},
+                {"id": "single-chapter", "type": "PARTICIPATES_IN", "source": person, "target": timeline_entity("meeting", "Event", "论剑"), "from_chapter": 10, "to_chapter": 10},
+                {"id": "started", "type": "KNOWS", "source": person, "target": timeline_entity("dugu", "Swordplay", "独孤九剑"), "from_chapter": 10, "to_chapter": None},
+            ],
+        }
+
+
+def test_timeline_detail_classifies_and_deduplicates_relationship_states() -> None:
+    detail = GraphService(TimelineDetailRepository()).timeline_detail("p-1", "event-1")
+
+    assert [item.id for item in detail.relationship_states.started] == ["started", "single-chapter"]
+    assert [item.id for item in detail.relationship_states.active] == ["active", "timeless"]
+    assert [item.id for item in detail.relationship_states.ended] == ["ended"]
+    assert detail.relationship_states.started[0].label == "掌握"
+    assert [item.id for item in detail.participants] == ["linghu"]
+    assert [item.id for item in detail.evidence] == ["ev-1"]
+
+
+def test_timeline_detail_does_not_infer_states_without_a_chapter() -> None:
+    repository = TimelineDetailRepository()
+    detail_row = repository.timeline_detail("p-1", "event-1")
+    detail_row["chapter_number"] = None
+    repository.timeline_detail = lambda project_id, event_id: detail_row
+
+    detail = GraphService(repository).timeline_detail("p-1", "event-1")
+
+    assert detail.relationship_states.started == []
+    assert detail.relationship_states.active == []
+    assert detail.relationship_states.ended == []
+    assert detail.participants[0].name == "令狐冲"
+    assert detail.evidence[0].quote == "风清扬传剑"
+
+
+def test_missing_timeline_detail_raises_not_found() -> None:
+    class Repository:
+        def timeline_detail(self, project_id: str, event_id: str):
+            return None
+
+    with pytest.raises(EntityNotFoundError):
+        GraphService(Repository()).timeline_detail("p-1", "missing")
+
+
 class FakeResult:
     def __init__(self, record):
         self.record = record
@@ -425,3 +509,37 @@ def test_relation_detail_query_aggregates_evidence_before_returning_relation() -
     assert result == relation
     assert "WITH fact, source, target, collect(DISTINCT" in session.statement
     assert "evidence: [item IN evidence_rows WHERE item.id IS NOT NULL]" in session.statement
+
+
+def test_timeline_detail_query_is_project_scoped_and_bounded() -> None:
+    event = timeline_entity("event-1", "Event", "思过崖传剑")
+    session = FakeSession(
+        {
+            "event": event,
+            "chapter_number": 10,
+            "participants": [],
+            "evidence": [],
+            "relationships": [],
+        }
+    )
+    repository = Neo4jGraphRepository(FakeDriver(session))
+
+    result = repository.timeline_detail("p-1", "event-1")
+
+    assert result == {
+        "event": event,
+        "chapter_number": 10,
+        "participants": [],
+        "evidence": [],
+        "relationships": [],
+    }
+    assert "event.type IN ['Event', 'TeachingEvent']" in session.statement
+    assert "participant.type = 'Person'" in session.statement
+    assert "coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'" in session.statement
+    assert session.parameters == {"project_id": "p-1", "event_id": "event-1"}
+
+
+def test_timeline_detail_query_returns_none_for_unknown_event() -> None:
+    repository = Neo4jGraphRepository(FakeDriver(FakeSession(None)))
+
+    assert repository.timeline_detail("p-1", "missing") is None

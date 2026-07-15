@@ -9,6 +9,7 @@ from app.graph.models import (
     Neighborhood,
     RelatedFact,
     TimelineEvent,
+    TimelineEventDetail,
 )
 from app.graph.repository import Neo4jGraphRepository
 from app.graph.service import EntityNotFoundError, GraphService
@@ -93,6 +94,17 @@ def timeline(
         lambda: GraphService(repository).timeline(
             project_id, person_id, from_chapter, to_chapter, limit
         )
+    )
+
+
+@router.get(
+    "/api/graph/timeline/{event_id}", response_model=TimelineEventDetail
+)
+def timeline_detail(
+    repository: Repository, event_id: str, project_id: str
+) -> TimelineEventDetail:
+    return execute(
+        lambda: GraphService(repository).timeline_detail(project_id, event_id)
     )
 
 

@@ -28,44 +28,60 @@ describe('App', () => {
 
     render(<App />)
 
-    await waitFor(() => expect(screen.getByRole('link', { name: '管理员登录' })).toBeVisible())
+    const login = await screen.findByRole('link', { name: '管理员登录' })
+    expect(login).toBeVisible()
+    expect(login).toHaveClass('auth-icon-control')
+    expect(login).toHaveAttribute('title', '管理员登录')
+    expect(login).not.toHaveTextContent('管理员登录')
     expect(screen.queryByRole('link', { name: '构建' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '审核' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '管理员' })).not.toBeInTheDocument()
   })
 
   it('shows protected navigation for a ready administrator session', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input)
+      if (path === '/api/auth/session') {
+        return new Response(
+          JSON.stringify({
+            admin: {
+              id: 'admin-1',
+              username: 'admin',
+              is_enabled: true,
+              must_change_password: false,
+              created_at: '',
+              updated_at: '',
+            },
+            must_change_password: false,
+            csrf_token: 'csrf-token',
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (path === '/api/auth/logout') {
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } })
+    })
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const path = String(input)
-        if (path === '/api/auth/session') {
-          return new Response(
-            JSON.stringify({
-              admin: {
-                id: 'admin-1',
-                username: 'admin',
-                is_enabled: true,
-                must_change_password: false,
-                created_at: '',
-                updated_at: '',
-              },
-              must_change_password: false,
-              csrf_token: 'csrf-token',
-            }),
-            { headers: { 'Content-Type': 'application/json' } },
-          )
-        }
-        return new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } })
-      }),
+      fetchMock,
     )
+    const user = userEvent.setup()
 
     render(<App />)
 
     await waitFor(() => expect(screen.getByRole('link', { name: '管理员' })).toBeVisible())
     expect(screen.getByRole('link', { name: '构建' })).toBeVisible()
     expect(screen.getByRole('link', { name: '审核' })).toBeVisible()
-    expect(screen.getByText('admin')).toBeVisible()
+    const logout = screen.getByRole('button', { name: '退出管理员登录' })
+    expect(logout).toHaveClass('auth-icon-control')
+    expect(logout).toHaveAttribute('title', '退出管理员登录')
+    expect(screen.queryByText('admin')).not.toBeInTheDocument()
+
+    await user.click(logout)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' })))
   })
 
   it('renders the monochrome product header with primary navigation', () => {

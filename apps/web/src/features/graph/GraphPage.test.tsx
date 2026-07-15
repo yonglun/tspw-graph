@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
@@ -56,6 +56,10 @@ describe('GraphPage', () => {
     expect(screen.getByRole('heading', { name: '从一个人物开始' })).toBeVisible()
     expect(screen.getByText('搜索 → 选择实体 → 展开关系')).toBeVisible()
     expect(screen.getByRole('status')).toHaveClass('canvas-empty')
+    const canvas = screen.getByLabelText('知识图谱画布')
+    const renderer = within(canvas).getByTestId('graph-renderer')
+    expect(renderer).not.toContainElement(screen.getByRole('status'))
+    expect(renderer).not.toContainElement(within(canvas).getByRole('list', { name: '图谱节点' }))
   })
 
   it('hydrates an entity neighborhood from the entity query parameter', async () => {

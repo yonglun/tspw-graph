@@ -1288,6 +1288,11 @@ select:focus-visible {
   background-image: none;
 }
 
+.graph-renderer {
+  position: absolute;
+  inset: 0;
+}
+
 .canvas-empty {
   position: absolute;
   inset: 0;

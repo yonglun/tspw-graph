@@ -74,8 +74,7 @@ select:focus-visible {
   backdrop-filter: blur(12px);
 }
 
-.header-tools,
-.account-menu {
+.header-tools {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -84,9 +83,22 @@ select:focus-visible {
 }
 
 .header-tools .project-switcher { min-width: 180px; }
-.account-menu { color: var(--ds-text-secondary); font-size: 13px; }
-.account-menu button,
-.login-link,
+.auth-icon-control {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ds-radius);
+  background: transparent;
+  color: var(--ds-text-secondary);
+  text-decoration: none;
+}
+.auth-icon-control:hover { background: var(--ds-background-hover); color: var(--ds-text-primary); }
+.auth-icon-control svg { width: 18px; height: 18px; }
+
 .row-actions button,
 .dialog-actions button {
   min-height: 32px;
@@ -97,8 +109,6 @@ select:focus-visible {
   color: var(--ds-text-secondary);
   text-decoration: none;
 }
-.account-menu button:hover,
-.login-link:hover,
 .row-actions button:hover,
 .dialog-actions button:hover { background: var(--ds-background-hover); color: var(--ds-text-primary); }
 

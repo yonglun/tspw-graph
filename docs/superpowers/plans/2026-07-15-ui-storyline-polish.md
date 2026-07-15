@@ -56,7 +56,7 @@
 - Produces: `LoginIcon(): JSX.Element` and `LogoutIcon(): JSX.Element`.
 - Preserves: `/login` navigation and `auth.logout()` behavior.
 
-- [ ] **Step 1: Write failing header-control tests**
+- [x] **Step 1: Write failing header-control tests**
 
 Add assertions to the anonymous and ready-session tests:
 
@@ -74,7 +74,7 @@ expect(screen.queryByText('admin')).not.toBeInTheDocument()
 
 In the ready-session test, make `logout` a spy and assert that clicking the icon calls it once.
 
-- [ ] **Step 2: Run the tests and confirm RED**
+- [x] **Step 2: Run the tests and confirm RED**
 
 Run from `apps/web`:
 
@@ -84,7 +84,7 @@ npm test -- --run src/App.test.tsx
 
 Expected: FAIL because the current controls contain visible text and have no `auth-icon-control` class or icon-only accessible label.
 
-- [ ] **Step 3: Add inline SVG icon components**
+- [x] **Step 3: Add inline SVG icon components**
 
 Create `AuthIcons.tsx`:
 
@@ -98,7 +98,7 @@ export function LogoutIcon() {
 }
 ```
 
-- [ ] **Step 4: Replace text controls and add fixed-size styling**
+- [x] **Step 4: Replace text controls and add fixed-size styling**
 
 In `SiteHeader`, render:
 
@@ -128,7 +128,7 @@ Add CSS:
 
 Remove obsolete `.account-menu` and `.login-link` text-control rules that no longer have consumers.
 
-- [ ] **Step 5: Run focused tests and commit**
+- [x] **Step 5: Run focused tests and commit**
 
 ```bash
 npm test -- --run src/App.test.tsx
@@ -152,7 +152,7 @@ Expected: App tests PASS.
 - Consumes: `visibleEntityTypeStyles(nodes)` and each style's `label` and `color`.
 - Produces: `.graph-legend-dot` with inline `--legend-color`, and `.canvas-empty-path` copy.
 
-- [ ] **Step 1: Write failing empty-state and legend marker tests**
+- [x] **Step 1: Write failing empty-state and legend marker tests**
 
 Add one test for the untouched graph page:
 
@@ -170,7 +170,7 @@ expect(personLegend).toHaveStyle('--legend-color: #4f46e5')
 expect(personLegend).toHaveAccessibleName('人物')
 ```
 
-- [ ] **Step 2: Run graph tests and confirm RED**
+- [x] **Step 2: Run graph tests and confirm RED**
 
 ```bash
 npm test -- --run src/features/graph/GraphPage.test.tsx
@@ -178,7 +178,7 @@ npm test -- --run src/features/graph/GraphPage.test.tsx
 
 Expected: FAIL because the current empty state has no heading/path structure and legend markers have no stable test/accessibility identity.
 
-- [ ] **Step 3: Implement the structured empty state**
+- [x] **Step 3: Implement the structured empty state**
 
 Replace the empty canvas fragment with:
 
@@ -191,7 +191,7 @@ Replace the empty canvas fragment with:
 </div>
 ```
 
-- [ ] **Step 4: Render explicit legend markers**
+- [x] **Step 4: Render explicit legend markers**
 
 Change the footer mapping to:
 
@@ -199,7 +199,7 @@ Change the footer mapping to:
 {visibleEntityTypeStyles(graph.nodes).map(type => <span className="graph-legend-item" key={type.label}><i className="graph-legend-dot" data-testid={`legend-${type.label}`} aria-label={type.label} style={{ '--legend-color': type.color } as CSSProperties} />{type.label}</span>)}
 ```
 
-- [ ] **Step 5: Add centered, responsive styling**
+- [x] **Step 5: Add centered, responsive styling**
 
 Add CSS that makes the marker visible and centers the empty state:
 
@@ -215,7 +215,7 @@ Add CSS that makes the marker visible and centers the empty state:
 .graph-legend-dot { width: 10px; height: 10px; display: inline-block; flex: 0 0 10px; border-radius: 50%; background: var(--legend-color); box-shadow: 0 0 0 1px rgb(0 0 0 / 8%); }
 ```
 
-- [ ] **Step 6: Run graph tests and commit**
+- [x] **Step 6: Run graph tests and commit**
 
 ```bash
 npm test -- --run src/features/graph/GraphPage.test.tsx
@@ -239,7 +239,7 @@ Expected: GraphPage tests PASS.
 - Produces service method: `GraphService.timeline_detail(project_id: str, event_id: str) -> TimelineEventDetail`.
 - Produces response models: `TimelineRelationship`, `TimelineRelationshipStates`, `TimelineEventDetail`.
 
-- [ ] **Step 1: Write failing service classification tests**
+- [x] **Step 1: Write failing service classification tests**
 
 Add a repository stub that returns chapter 10 with four facts:
 
@@ -275,7 +275,7 @@ assert detail.evidence[0].quote == "风清扬传剑"
 Add tests for a fact with `from_chapter == to_chapter == 10` being in `started`, duplicate fact IDs appearing once, and `None` raising `EntityNotFoundError`.
 Add a chapterless event fixture and assert all three relationship-state lists are empty while participants and evidence remain available.
 
-- [ ] **Step 2: Run service tests and confirm RED**
+- [x] **Step 2: Run service tests and confirm RED**
 
 Run from `apps/api`:
 
@@ -285,7 +285,7 @@ python -m pytest tests/graph/test_service.py -q
 
 Expected: FAIL because timeline detail models and service method do not exist.
 
-- [ ] **Step 3: Add typed response models**
+- [x] **Step 3: Add typed response models**
 
 Add:
 
@@ -314,7 +314,7 @@ class TimelineEventDetail(BaseModel):
     relationship_states: TimelineRelationshipStates
 ```
 
-- [ ] **Step 4: Implement deterministic classification in `GraphService`**
+- [x] **Step 4: Implement deterministic classification in `GraphService`**
 
 Add `_timeline_relationship` to enrich labels via `relation_by_id`, deduplicate by fact ID, and classify with this precedence:
 
@@ -335,7 +335,7 @@ else:
 Return `TimelineEventDetail` with deduplicated participants and evidence, preserving repository order inside each group.
 When `chapter_number` is `None`, do not infer temporal state: return empty `started`, `active`, and `ended` lists while preserving the event, participants, and evidence.
 
-- [ ] **Step 5: Run service tests and commit**
+- [x] **Step 5: Run service tests and commit**
 
 ```bash
 python -m pytest tests/graph/test_service.py -q
@@ -359,7 +359,7 @@ Expected: graph service tests PASS.
 - Produces repository method: `Neo4jGraphRepository.timeline_detail(project_id, event_id)` returning `event`, `chapter_number`, `participants`, `evidence`, and `relationships`.
 - Exposes: `GET /api/graph/timeline/{event_id}?project_id=...` with `TimelineEventDetail` response model.
 
-- [ ] **Step 1: Write failing repository and router tests**
+- [x] **Step 1: Write failing repository and router tests**
 
 Repository query assertions must require:
 
@@ -372,7 +372,7 @@ assert session.parameters == {"project_id": "p-1", "event_id": "event-1"}
 
 Add a router repository stub returning the raw detail shape from Task 3, call `/api/graph/timeline/event-1`, and assert status 200 plus `relationship_states.started[0].label == "掌握"`. Add a stub returning `None` and assert status 404 with `ENTITY_NOT_FOUND`.
 
-- [ ] **Step 2: Run focused API tests and confirm RED**
+- [x] **Step 2: Run focused API tests and confirm RED**
 
 ```bash
 python -m pytest tests/graph/test_service.py tests/graph/test_router.py -q
@@ -380,7 +380,7 @@ python -m pytest tests/graph/test_service.py tests/graph/test_router.py -q
 
 Expected: FAIL because the repository method and route do not exist.
 
-- [ ] **Step 3: Implement one bounded Neo4j detail query**
+- [x] **Step 3: Implement one bounded Neo4j detail query**
 
 Add the same `timeline_detail` signature to `GraphRepository`, then implement it in `Neo4jGraphRepository` with one bounded query:
 
@@ -470,7 +470,7 @@ return {
 
 Return `None` when the event match produces no record.
 
-- [ ] **Step 4: Add the route after the timeline list route**
+- [x] **Step 4: Add the route after the timeline list route**
 
 ```python
 @router.get("/api/graph/timeline/{event_id}", response_model=TimelineEventDetail)
@@ -478,7 +478,7 @@ def timeline_detail(repository: Repository, event_id: str, project_id: str) -> T
     return execute(lambda: GraphService(repository).timeline_detail(project_id, event_id))
 ```
 
-- [ ] **Step 5: Run graph API tests and commit**
+- [x] **Step 5: Run graph API tests and commit**
 
 ```bash
 python -m pytest tests/graph/test_service.py tests/graph/test_router.py -q
@@ -503,7 +503,7 @@ Expected: focused graph tests PASS.
 - Produces client types: `TimelineRelationship`, `TimelineEventDetail`.
 - Produces event buttons with `aria-expanded`, cache keyed by event ID, and retryable inline errors.
 
-- [ ] **Step 1: Write failing interaction tests**
+- [x] **Step 1: Write failing interaction tests**
 
 Cover these outcomes with mocked fetch responses:
 
@@ -524,7 +524,7 @@ Also test:
 - clicking retry performs another request and shows detail;
 - changing person clears the expanded detail.
 
-- [ ] **Step 2: Run StoryPage tests and confirm RED**
+- [x] **Step 2: Run StoryPage tests and confirm RED**
 
 ```bash
 npm test -- --run src/features/story/StoryPage.test.tsx
@@ -532,7 +532,7 @@ npm test -- --run src/features/story/StoryPage.test.tsx
 
 Expected: FAIL because cards are not interactive and no detail endpoint is called.
 
-- [ ] **Step 3: Add client timeline types**
+- [x] **Step 3: Add client timeline types**
 
 ```ts
 export type TimelineRelationship = {
@@ -561,7 +561,7 @@ export function getTimelineDetail(projectId: string, eventId: string, signal?: A
 }
 ```
 
-- [ ] **Step 4: Implement selected-event state, cache, and stale-request protection**
+- [x] **Step 4: Implement selected-event state, cache, and stale-request protection**
 
 Use:
 
@@ -606,7 +606,7 @@ async function toggleEvent(eventId: string, forceReload = false) {
 }
 ```
 
-- [ ] **Step 5: Render accessible cards and relationship groups**
+- [x] **Step 5: Render accessible cards and relationship groups**
 
 The trigger must be a native button with `aria-expanded` and `aria-controls`. Extract a focused `RelationshipStateGroup` inside `StoryPage.tsx` that receives `title`, `tone`, `items`, and `emptyText`. Render source name, localized label, target name, and optional chapter range. Render event evidence in blockquotes with chapter metadata.
 
@@ -654,7 +654,7 @@ Add the event layout styles:
 @media (max-width: 760px) { .timeline-state-grid { grid-template-columns: 1fr; } }
 ```
 
-- [ ] **Step 6: Run StoryPage tests and commit**
+- [x] **Step 6: Run StoryPage tests and commit**
 
 ```bash
 npm test -- --run src/features/story/StoryPage.test.tsx
@@ -679,7 +679,7 @@ Expected: StoryPage tests PASS.
 - Consumes optional graph search parameter: `entity`.
 - Uses existing `/api/entities/{entity_id}` and `/api/graph/neighborhood` calls.
 
-- [ ] **Step 1: Write failing navigation and hydration tests**
+- [x] **Step 1: Write failing navigation and hydration tests**
 
 In StoryPage tests, wrap with `MemoryRouter`, expand an event, click `在图谱中查看`, and assert pathname `/graph` plus both `project` and `entity` parameters.
 
@@ -693,7 +693,7 @@ In GraphPage tests, render:
 
 Mock entity detail and neighborhood endpoints, then assert the event name and neighbor appear without typing in search.
 
-- [ ] **Step 2: Run both focused suites and confirm RED**
+- [x] **Step 2: Run both focused suites and confirm RED**
 
 ```bash
 npm test -- --run src/features/story/StoryPage.test.tsx src/features/graph/GraphPage.test.tsx
@@ -701,7 +701,7 @@ npm test -- --run src/features/story/StoryPage.test.tsx src/features/graph/Graph
 
 Expected: FAIL because no navigation action or entity query hydration exists.
 
-- [ ] **Step 3: Add the storyline graph link**
+- [x] **Step 3: Add the storyline graph link**
 
 Use `useNavigate` and navigate with:
 
@@ -709,7 +709,7 @@ Use `useNavigate` and navigate with:
 navigate({ pathname: '/graph', search: `?project=${encodeURIComponent(projectId)}&entity=${encodeURIComponent(detail.event.id)}` })
 ```
 
-- [ ] **Step 4: Hydrate GraphPage from the entity parameter**
+- [x] **Step 4: Hydrate GraphPage from the entity parameter**
 
 Use `useSearchParams` to read `entity`. On project/entity change, fetch the entity detail first and pass it to the existing `selectEntity` path (`EntityDetail` structurally extends `EntitySummary`). Track the last hydrated `projectId:entityId` in a ref so state updates do not issue duplicate requests. Abort the initial entity-detail fetch on unmount/project change; `selectEntity` continues to own and abort its neighborhood/detail requests. If hydration returns 404, retain the empty canvas and show a non-blocking alert.
 
@@ -736,7 +736,7 @@ useEffect(() => {
 }, [entityId, projectId, selectEntity])
 ```
 
-- [ ] **Step 5: Run focused tests and commit**
+- [x] **Step 5: Run focused tests and commit**
 
 ```bash
 npm test -- --run src/features/story/StoryPage.test.tsx src/features/graph/GraphPage.test.tsx
@@ -757,7 +757,7 @@ Expected: StoryPage and GraphPage tests PASS.
 **Interfaces:**
 - Verifies all public behavior introduced by Tasks 1–6.
 
-- [ ] **Step 1: Run the complete API suite**
+- [x] **Step 1: Run the complete API suite**
 
 From `apps/api`:
 
@@ -767,7 +767,7 @@ python -m pytest -q
 
 Expected: all API tests PASS.
 
-- [ ] **Step 2: Run the complete web suite, type check, and build**
+- [x] **Step 2: Run the complete web suite, type check, and build**
 
 From `apps/web`:
 
@@ -779,7 +779,7 @@ npm run build
 
 Expected: all web tests PASS, TypeScript exits 0, and Vite creates `dist/`.
 
-- [ ] **Step 3: Run repository-level configuration checks**
+- [x] **Step 3: Run repository-level configuration checks**
 
 From the repository root:
 
@@ -790,7 +790,7 @@ docker compose config --quiet
 
 Expected: both commands exit 0.
 
-- [ ] **Step 4: Verify in a real browser at desktop width**
+- [x] **Step 4: Verify in a real browser at desktop width**
 
 At 1440px width verify:
 
@@ -803,7 +803,7 @@ At 1440px width verify:
 - `在图谱中查看` loads the event neighborhood;
 - browser console contains no errors.
 
-- [ ] **Step 5: Verify narrow layout and keyboard access**
+- [x] **Step 5: Verify narrow layout and keyboard access**
 
 At 390px width verify:
 
@@ -813,7 +813,7 @@ At 390px width verify:
 - storyline state groups stack to one column;
 - Tab, Enter, and Space operate icon and event controls in logical order.
 
-- [ ] **Step 6: Review final diff and commit verification fixes**
+- [x] **Step 6: Review final diff and commit verification fixes**
 
 ```bash
 git status --short

@@ -578,6 +578,8 @@ def test_qa_suggestion_candidate_is_project_scoped_evidence_backed_and_bounded()
     assert session.statement.count("EVIDENCED_BY") >= 4
     assert "coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'" in session.statement
     assert "coalesce(person.review_status, 'ACCEPTED') <> 'MERGED'" in session.statement
+    assert "source IS NOT NULL" in session.statement
+    assert session.statement.count("target IS NOT NULL") >= 2
     assert "ORDER BY relationship_count DESC" in session.statement
     assert "LIMIT 1" in session.statement
 

@@ -1,4 +1,5 @@
 from app.qa.suggestions import QaSuggestionService
+from app.qa.intents import parse_local_intent
 
 
 class Repository:
@@ -42,6 +43,16 @@ def test_builds_ordered_questions_from_supported_capabilities() -> None:
     assert response.suggestions[0].question == "陈家洛的师父是谁？"
     assert len(response.suggestions) == 6
     assert repository.calls == ["project-book"]
+    assert [parse_local_intent(item.question).relation for item in response.suggestions[:3]] == [
+        "MASTER_OF",
+        "MEMBER_OF",
+        "KNOWS",
+    ]
+    assert [parse_local_intent(item.question).property for item in response.suggestions[3:]] == [
+        "gender",
+        "identity",
+        "honorific",
+    ]
 
 
 def test_returns_empty_response_without_answerable_candidate() -> None:

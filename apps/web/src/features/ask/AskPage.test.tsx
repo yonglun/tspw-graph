@@ -91,6 +91,26 @@ it('shows an empty recommendation state without hard-coded fallbacks', async () 
   expect(screen.queryByText(/令狐冲/)).not.toBeInTheDocument()
 })
 
+it('keeps manual questions available when recommendations fail', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+    const url = String(input)
+    if (url === '/api/projects') return new Response(JSON.stringify(projects))
+    return new Response(
+      JSON.stringify({ detail: { code: 'GRAPH_UNAVAILABLE' } }),
+      { status: 503 },
+    )
+  }))
+
+  render(
+    <MemoryRouter initialEntries={['/ask?project=project-shujian']}>
+      <ProjectProvider><AskPage /></ProjectProvider>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByText('问题建议暂时不可用，仍可手动提问')).toBeVisible()
+  expect(screen.getByLabelText('向《书剑恩仇录》图谱提问')).toBeEnabled()
+})
+
 it('clears the previous answer when the project changes', async () => {
   const fetchMock = vi.fn(async (input: string | URL | Request) => {
     const url = String(input)

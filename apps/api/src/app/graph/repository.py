@@ -313,38 +313,37 @@ class Neo4jGraphRepository:
         statement = """
             MATCH (person:Entity {project_id: $project_id, type: 'Person'})
             WHERE coalesce(person.review_status, 'ACCEPTED') <> 'MERGED'
-            CALL {
-                WITH person
+            CALL (person) {
                 OPTIONAL MATCH (fact:Fact {project_id: $project_id})-[:TARGET]->(person)
                 WHERE fact.type = 'MASTER_OF'
                   AND coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
                 OPTIONAL MATCH (fact)-[:SOURCE]->(source:Entity {project_id: $project_id})
                 OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence {project_id: $project_id})
-                WHERE coalesce(source.review_status, 'ACCEPTED') <> 'MERGED'
+                WHERE source IS NOT NULL
+                  AND coalesce(source.review_status, 'ACCEPTED') <> 'MERGED'
                 RETURN collect(DISTINCT CASE WHEN evidence IS NOT NULL THEN fact END) AS master_facts
             }
-            CALL {
-                WITH person
+            CALL (person) {
                 OPTIONAL MATCH (fact:Fact {project_id: $project_id})-[:SOURCE]->(person)
                 WHERE fact.type = 'MEMBER_OF'
                   AND coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
                 OPTIONAL MATCH (fact)-[:TARGET]->(target:Entity {project_id: $project_id})
                 OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence {project_id: $project_id})
-                WHERE coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
+                WHERE target IS NOT NULL
+                  AND coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
                 RETURN collect(DISTINCT CASE WHEN evidence IS NOT NULL THEN fact END) AS member_facts
             }
-            CALL {
-                WITH person
+            CALL (person) {
                 OPTIONAL MATCH (fact:Fact {project_id: $project_id})-[:SOURCE]->(person)
                 WHERE fact.type = 'KNOWS'
                   AND coalesce(fact.review_status, 'ACCEPTED') <> 'REJECTED'
                 OPTIONAL MATCH (fact)-[:TARGET]->(target:Entity {project_id: $project_id})
                 OPTIONAL MATCH (fact)-[:EVIDENCED_BY]->(evidence:Evidence {project_id: $project_id})
-                WHERE coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
+                WHERE target IS NOT NULL
+                  AND coalesce(target.review_status, 'ACCEPTED') <> 'MERGED'
                 RETURN collect(DISTINCT CASE WHEN evidence IS NOT NULL THEN fact END) AS knows_facts
             }
-            CALL {
-                WITH person
+            CALL (person) {
                 OPTIONAL MATCH (person)-[:HAS_ATTRIBUTE]->(attribute:AttributeAssertion {project_id: $project_id})
                 WHERE attribute.property_id IN $supported_properties
                   AND trim(toString(attribute.value)) <> ''

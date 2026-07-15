@@ -384,6 +384,47 @@ describe('GraphPage', () => {
     expect(personLegend).toHaveAccessibleName('人物')
   })
 
+  it('reopens the selected person in the newly selected project', async () => {
+    const projects = [
+      { id: 'p-1', title: '项目一', is_builtin: false, source_encoding: 'utf-8', source_size: 1, created_at: '', updated_at: '' },
+      { id: 'p-2', title: '项目二', is_builtin: false, source_encoding: 'utf-8', source_size: 1, created_at: '', updated_at: '' },
+    ]
+    const oldEntity = { ...entity, id: 'old-entity', project_id: 'p-1' }
+    const newEntity = { ...entity, id: 'new-entity', project_id: 'p-2' }
+    const newNeighbor = { ...yue, id: 'new-neighbor', project_id: 'p-2', name: '风清扬' }
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url === '/api/projects') return new Response(JSON.stringify(projects))
+      if (url.includes('/api/graph/search') && url.includes('project_id=p-1')) return new Response(JSON.stringify([oldEntity]))
+      if (url.includes('/api/graph/search') && url.includes('project_id=p-2')) return new Response(JSON.stringify([newEntity]))
+      if (url.includes('/api/entities/old-entity')) return new Response(JSON.stringify({ ...oldEntity, attributes: [], relations: [], facts: [] }))
+      if (url.includes('/api/entities/new-entity')) return new Response(JSON.stringify({ ...newEntity, attributes: [], relations: [], facts: [] }))
+      if (url.includes('/api/graph/neighborhood') && url.includes('project_id=p-1')) return new Response(JSON.stringify({ nodes: [oldEntity, yue], edges: [] }))
+      if (url.includes('/api/graph/neighborhood') && url.includes('project_id=p-2')) return new Response(JSON.stringify({ nodes: [newEntity, newNeighbor], edges: [] }))
+      return new Response(JSON.stringify({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/graph?project=p-1']}>
+        <AuthContext.Provider value={readyAuth}><ProjectProvider><ProjectSwitcher /><GraphPage /></ProjectProvider></AuthContext.Provider>
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByRole('searchbox'), '令狐冲')
+    await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
+    expect(await screen.findByText('岳不群')).toBeVisible()
+
+    await user.selectOptions(screen.getByLabelText('当前项目'), 'p-2')
+
+    expect(await screen.findByText('风清扬')).toBeVisible()
+    expect(screen.queryByText('岳不群')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('project_id=p-2&entity_id=new-entity&depth=1'),
+      expect.anything(),
+    )
+  })
+
   it('clears graph and entity state when the router project changes', async () => {
     const projects = [
       { id: 'p-1', title: '项目一', is_builtin: false, source_encoding: 'utf-8', source_size: 1, created_at: '', updated_at: '' },

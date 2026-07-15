@@ -30,6 +30,9 @@ export function GraphPage() {
   const graphRequest = useRef<AbortController | undefined>(undefined)
   const detailRequest = useRef<AbortController | undefined>(undefined)
   const hydratedEntity = useRef<string | undefined>(undefined)
+  const selectedEntityName = useRef<string | undefined>(undefined)
+  const pendingProjectSelection = useRef<string | undefined>(undefined)
+  const previousProjectId = useRef(projectId)
 
   const abortEntityRequests = useCallback(() => {
     graphRequest.current?.abort()
@@ -39,17 +42,12 @@ export function GraphPage() {
   }, [])
 
   useEffect(() => {
-    if (!query.trim()) { setResults([]); setError(''); return }
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      apiFetch<EntitySummary[]>(`/api/graph/search?project_id=${projectId}&query=${encodeURIComponent(query)}`, { signal: controller.signal })
-        .then(nextResults => { setResults(nextResults); setError('') })
-        .catch((e: Error) => { if (e.name !== 'AbortError') setError(e.message) })
-    }, 180)
-    return () => { window.clearTimeout(timer); controller.abort() }
-  }, [query, projectId])
-
-  useEffect(() => {
+    const projectChanged = previousProjectId.current !== projectId
+    previousProjectId.current = projectId
+    if (projectChanged && selectedEntityName.current) {
+      pendingProjectSelection.current = selectedEntityName.current
+      setQuery(selectedEntityName.current)
+    }
     abortEntityRequests()
     setResults([])
     setGraph(EMPTY_GRAPH)
@@ -67,6 +65,7 @@ export function GraphPage() {
 
   const selectEntity = useCallback((entity: EntitySummary) => {
     abortEntityRequests()
+    selectedEntityName.current = entity.name
     setSelected(entity)
     setResults([])
     setError('')
@@ -91,6 +90,36 @@ export function GraphPage() {
       .then(nextDetail => setDetail(nextDetail))
       .catch((e: Error) => { if (e.name !== 'AbortError') setError(e.message) })
   }, [abortEntityRequests, projectId])
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); setError(''); return }
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      apiFetch<EntitySummary[]>(`/api/graph/search?project_id=${projectId}&query=${encodeURIComponent(query)}`, { signal: controller.signal })
+        .then(nextResults => {
+          const pendingName = pendingProjectSelection.current
+          const matchingEntity = pendingName
+            ? nextResults.find(entity => entity.name === pendingName || entity.aliases?.includes(pendingName))
+            : undefined
+
+          if (pendingName) pendingProjectSelection.current = undefined
+          if (matchingEntity) {
+            selectEntity(matchingEntity)
+            return
+          }
+
+          setResults(nextResults)
+          setError(pendingName ? `当前项目未找到“${pendingName}”` : '')
+        })
+        .catch((e: Error) => {
+          if (e.name !== 'AbortError') {
+            pendingProjectSelection.current = undefined
+            setError(e.message)
+          }
+        })
+    }, 180)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [query, projectId, selectEntity])
 
   useEffect(() => {
     if (!projectId || !entityId) return

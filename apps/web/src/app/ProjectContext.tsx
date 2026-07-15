@@ -18,7 +18,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setProjects(Array.isArray(nextProjects) ? nextProjects : [])
   }, [])
   useEffect(() => { refreshProjects().catch(() => setProjects([])) }, [refreshProjects])
-  const setProjectId = useCallback((id: string) => { const next = new URLSearchParams(params); next.set('project', id); setParams(next, { replace: true }) }, [params, setParams])
+  const setProjectId = useCallback((id: string) => {
+    const next = new URLSearchParams(params)
+    next.set('project', id)
+    next.delete('entity')
+    setParams(next, { replace: true })
+  }, [params, setParams])
   useEffect(() => {
     if (projectId === requestedProjectId) return
     setProjectId(projectId)

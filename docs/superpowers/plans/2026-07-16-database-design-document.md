@@ -42,7 +42,7 @@
 - Consumes: 当前分支基于 `origin/master` 的数据库实现。
 - Produces: SQLite 表、约束与索引清单；Neo4j 节点、关系、约束与索引清单；跨库数据生命周期清单。
 
-- [ ] **Step 1: 列出全部 SQLite ORM 表**
+- [x] **Step 1: 列出全部 SQLite ORM 表**
 
 Run:
 
@@ -53,7 +53,7 @@ rg -n '__tablename__|UniqueConstraint|ForeignKey|index=True|primary_key=True' \
 
 Expected: 输出 `projects`、`jobs`、`job_events`、`job_quality`、`review_items`、`review_actions`、`quality_snapshots`、`admin_accounts`、`admin_sessions`、`admin_login_throttles`、`admin_audit_events` 共 11 张表及其约束声明。
 
-- [ ] **Step 2: 核对 SQLite 运行时升级逻辑**
+- [x] **Step 2: 核对 SQLite 运行时升级逻辑**
 
 Run:
 
@@ -64,7 +64,7 @@ rg -n 'create_all|ALTER TABLE|BEGIN IMMEDIATE|ondelete=' \
 
 Expected: 确认表由 `Base.metadata.create_all` 初始化；`projects` 和 `jobs.kind` 存在兼容升级；任务领取和认证关键写入使用 `BEGIN IMMEDIATE`；显式外键级联仅按代码记录。
 
-- [ ] **Step 3: 列出 Neo4j 约束、索引和写入关系**
+- [x] **Step 3: 列出 Neo4j 约束、索引和写入关系**
 
 Run:
 
@@ -75,7 +75,7 @@ rg -n 'CREATE CONSTRAINT|CREATE INDEX|MERGE \(|-\[:|\[r:RELATED' \
 
 Expected: 输出 6 个唯一约束、2 个实体索引，以及 `HAS_CHAPTER`、`HAS_ENTITY`、`IN_CHAPTER`、`HAS_ATTRIBUTE`、`EVIDENCED_BY`、`SOURCE`、`TARGET`、`RELATED` 等关系。
 
-- [ ] **Step 4: 核对部署存储位置和数据卷**
+- [x] **Step 4: 核对部署存储位置和数据卷**
 
 Run:
 
@@ -86,7 +86,7 @@ rg -n 'SQLITE_URL|DATA_ROOT|NEO4J_|volumes:|app-data|neo4j-data' \
 
 Expected: SQLite 文件为容器内 `/data/tspw-graph.db`，上传目录为 `/data/uploads`，二者位于 `app-data`；Neo4j `/data` 位于 `neo4j-data`。
 
-- [ ] **Step 5: 检查事实清单没有遗漏模型文件**
+- [x] **Step 5: 检查事实清单没有遗漏模型文件**
 
 Run:
 
@@ -110,11 +110,11 @@ Expected: 除 ORM 表外还能看到抽取、图谱、本体和问答的 Pydanti
 - Consumes: Task 1 的 SQLite 事实清单。
 - Produces: 文档第 1–5 节，包括总体架构图、数据流图、SQLite ER 图和 11 张表的字段字典。
 
-- [ ] **Step 1: 创建文档标题、状态说明和导航目录**
+- [x] **Step 1: 创建文档标题、状态说明和导航目录**
 
 在 `docs/database-design.md` 写入：文档目标、适用读者、事实来源、版本日期、数据库职责摘要和 15 节目录。明确“当前实现”和“建议”两类内容的视觉标记。
 
-- [ ] **Step 2: 编写总体架构图**
+- [x] **Step 2: 编写总体架构图**
 
 使用 Mermaid `flowchart LR` 表达：
 
@@ -130,11 +130,11 @@ Worker -> Neo4j
 
 在图后解释 SQLite 是控制面与工作流存储，Neo4j 是图谱查询存储，上传目录保存原始 TXT。
 
-- [ ] **Step 3: 编写构建数据流**
+- [x] **Step 3: 编写构建数据流**
 
 使用 Mermaid `sequenceDiagram` 覆盖上传、创建任务、Worker 领取任务、切分、抽取、解析、验证、导入、质量报告和完成状态。明确模型调用结果不会直接绕过验证写入 Neo4j。
 
-- [ ] **Step 4: 编写 SQLite ER 图**
+- [x] **Step 4: 编写 SQLite ER 图**
 
 使用 Mermaid `erDiagram` 表达已声明外键：
 
@@ -147,7 +147,7 @@ ADMIN_ACCOUNTS ||--o{ ADMIN_SESSIONS : owns
 
 在图下注明审核表和管理员审计表通过业务 ID 关联，但当前没有数据库外键。
 
-- [ ] **Step 5: 编写 11 张 SQLite 表字典**
+- [x] **Step 5: 编写 11 张 SQLite 表字典**
 
 每张表使用统一小节和 Markdown 表格，列出字段、类型、可空、默认值/生成规则、索引或约束、说明。对以下 JSON 字段给出脱敏结构示例：
 
@@ -159,7 +159,7 @@ ADMIN_ACCOUNTS ||--o{ ADMIN_SESSIONS : owns
 - `quality_snapshots.metrics`
 - `admin_audit_events.metadata`
 
-- [ ] **Step 6: 核对表名与字段名**
+- [x] **Step 6: 核对表名与字段名**
 
 Run:
 
@@ -172,7 +172,7 @@ done
 
 Expected: 文档中的表和字段逐项对应输出；不得使用历史规格中未落地的 `password_changed_at` 或 `recent_failure_at` 等字段。
 
-- [ ] **Step 7: 提交架构与 SQLite 章节**
+- [x] **Step 7: 提交架构与 SQLite 章节**
 
 ```bash
 git add docs/database-design.md
@@ -192,15 +192,15 @@ git commit -m "docs: describe database architecture and sqlite schema"
 - Consumes: Task 1 的 Neo4j 事实清单和 Task 2 的项目/任务定义。
 - Produces: 文档第 6–11 节，包括图模型、节点关系字典、映射、一致性、性能与生命周期。
 
-- [ ] **Step 1: 编写 Neo4j 图模型图**
+- [x] **Step 1: 编写 Neo4j 图模型图**
 
 使用 Mermaid `flowchart LR` 展示 `Project`、`Chapter`、`Entity`、`Fact`、`Evidence`、`AttributeAssertion` 六类节点及八类结构关系。用单独说明解释 `Fact` 与 `RELATED` 的双重表达。
 
-- [ ] **Step 2: 编写节点字典**
+- [x] **Step 2: 编写节点字典**
 
 分别记录六类节点的业务键、唯一约束、主要属性、入边、出边和生命周期。明确除 `Project.id` 外，其余节点使用 `(project_id, id)` 复合唯一约束。
 
-- [ ] **Step 3: 编写关系字典**
+- [x] **Step 3: 编写关系字典**
 
 记录以下关系：
 
@@ -217,11 +217,11 @@ git commit -m "docs: describe database architecture and sqlite schema"
 
 说明 `RELATED` 的 `project_id`、`id`、`type`、`from_chapter`、`to_chapter` 和 `confidence` 属性。
 
-- [ ] **Step 4: 编写索引、约束与查询性能说明**
+- [x] **Step 4: 编写索引、约束与查询性能说明**
 
 列出 6 个唯一约束和 2 个索引的原始 Cypher 语义。说明实体搜索使用 `(project_id, name)`，类型过滤使用 `(project_id, type)`，邻域查询从已定位实体沿 `RELATED` 展开，避免默认加载全图。
 
-- [ ] **Step 5: 编写 SQLite 与 Neo4j 映射和一致性边界**
+- [x] **Step 5: 编写 SQLite 与 Neo4j 映射和一致性边界**
 
 明确：
 
@@ -230,11 +230,11 @@ git commit -m "docs: describe database architecture and sqlite schema"
 - SQLite 不保存图节点副本，Neo4j 不保存管理员会话或任务租约。
 - 两库之间没有分布式事务；幂等 ID、`MERGE`、任务状态和重试共同实现最终一致性。
 
-- [ ] **Step 6: 编写数据生命周期**
+- [x] **Step 6: 编写数据生命周期**
 
 覆盖完整构建、属性补抽、任务暂停/重试、审核接受/拒绝、实体合并、项目删除和重新构建。明确 SQLite 外键级联与业务清理的区别，不推断未声明的级联行为。
 
-- [ ] **Step 7: 核对 Neo4j 结构与代码**
+- [x] **Step 7: 核对 Neo4j 结构与代码**
 
 Run:
 
@@ -245,7 +245,7 @@ rg -n 'MERGE .*\[:|MERGE .*\[r:RELATED' apps/api/src/app/graph/neo4j.py
 
 Expected: 文档的约束、索引和关系集合与代码逐项一致。
 
-- [ ] **Step 8: 提交 Neo4j 与一致性章节**
+- [x] **Step 8: 提交 Neo4j 与一致性章节**
 
 ```bash
 git add docs/database-design.md
@@ -266,7 +266,7 @@ git commit -m "docs: document neo4j graph model and consistency"
 - Consumes: Task 2–3 的存储结构和生命周期说明。
 - Produces: 文档第 12–15 节，包括备份恢复、安全、典型查询、限制与演进建议。
 
-- [ ] **Step 1: 编写 Docker 数据卷说明**
+- [x] **Step 1: 编写 Docker 数据卷说明**
 
 记录：
 
@@ -274,19 +274,19 @@ git commit -m "docs: document neo4j graph model and consistency"
 - `neo4j-data:/data` 保存 Neo4j 数据目录。
 - `.env` 与宿主机部署配置独立于命名卷，备份时需要单独管理且不得泄露密钥。
 
-- [ ] **Step 2: 编写一致性备份流程**
+- [x] **Step 2: 编写一致性备份流程**
 
 提供安全默认流程：进入维护窗口、停止 `web/api/worker` 写入、备份 `app-data` 与 `neo4j-data`、记录版本和时间、恢复服务。命令示例只使用占位备份目录，不执行删除卷操作。
 
-- [ ] **Step 3: 编写恢复与校验流程**
+- [x] **Step 3: 编写恢复与校验流程**
 
 恢复步骤包括配置、两个数据卷、服务启动、健康检查、SQLite 项目/任务检查、Neo4j 项目节点/实体/事实数量检查。明确未完成任务需要人工判断后重试或重建。
 
-- [ ] **Step 4: 编写安全设计**
+- [x] **Step 4: 编写安全设计**
 
 准确说明管理员密码摘要、会话令牌摘要、CSRF、登录限流和审计元数据；说明 Neo4j 7474/7687 端口暴露风险及生产建议。不要在任何示例中打印环境变量中的 Key 或密码。
 
-- [ ] **Step 5: 编写典型 SQLite 查询**
+- [x] **Step 5: 编写典型 SQLite 查询**
 
 至少包含：
 
@@ -299,7 +299,7 @@ git commit -m "docs: document neo4j graph model and consistency"
 
 查询只使用结构字段，不输出密码摘要、令牌摘要和 CSRF 值。
 
-- [ ] **Step 6: 编写典型 Cypher 查询**
+- [x] **Step 6: 编写典型 Cypher 查询**
 
 至少包含：
 
@@ -312,11 +312,11 @@ git commit -m "docs: document neo4j graph model and consistency"
 
 所有查询使用 `$project_id`、`$entity_id` 等参数。
 
-- [ ] **Step 7: 编写已知限制与演进建议**
+- [x] **Step 7: 编写已知限制与演进建议**
 
 已知限制至少包括：无正式迁移框架、SQLite 单写者特性、跨库最终一致性、审核表缺少项目外键、证据偏移依赖原文稳定性、Community 版备份能力限制。建议项单独标记，不伪装为当前实现。
 
-- [ ] **Step 8: 提交运维与附录章节**
+- [x] **Step 8: 提交运维与附录章节**
 
 ```bash
 git add docs/database-design.md
@@ -334,7 +334,7 @@ git commit -m "docs: add database operations and query guide"
 - Consumes: 完整数据库设计正文。
 - Produces: 通过结构、事实、链接和格式检查的最终文档，以及完成状态更新。
 
-- [ ] **Step 1: 检查必需章节**
+- [x] **Step 1: 检查必需章节**
 
 Run:
 
@@ -356,7 +356,7 @@ done
 
 Expected: 命令退出码为 0。
 
-- [ ] **Step 2: 检查所有 SQLite 表已记录**
+- [x] **Step 2: 检查所有 SQLite 表已记录**
 
 Run:
 
@@ -370,7 +370,7 @@ done
 
 Expected: 命令退出码为 0。
 
-- [ ] **Step 3: 检查所有 Neo4j 标签和关系已记录**
+- [x] **Step 3: 检查所有 Neo4j 标签和关系已记录**
 
 Run:
 
@@ -384,7 +384,7 @@ done
 
 Expected: 命令退出码为 0。
 
-- [ ] **Step 4: 检查 Mermaid 和代码围栏成对闭合**
+- [x] **Step 4: 检查 Mermaid 和代码围栏成对闭合**
 
 Run:
 
@@ -401,7 +401,7 @@ PY
 
 Expected: 输出 `markdown fences: ok`。
 
-- [ ] **Step 5: 检查仓库内 Markdown 链接**
+- [x] **Step 5: 检查仓库内 Markdown 链接**
 
 Run:
 
@@ -425,7 +425,7 @@ PY
 
 Expected: 输出 `local links: ok`。
 
-- [ ] **Step 6: 检查敏感信息与空白错误**
+- [x] **Step 6: 检查敏感信息与空白错误**
 
 Run:
 
@@ -436,11 +436,11 @@ git diff --check
 
 Expected: 两条命令均退出码为 0。
 
-- [ ] **Step 7: 更新规格和计划状态**
+- [x] **Step 7: 更新规格和计划状态**
 
 将设计规格状态改为“已实现”，并将本计划全部复选框更新为 `[x]`。只在全部检查通过后执行。
 
-- [ ] **Step 8: 提交最终核验结果**
+- [x] **Step 8: 提交最终核验结果**
 
 ```bash
 git add docs/database-design.md \

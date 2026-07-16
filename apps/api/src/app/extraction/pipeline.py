@@ -41,6 +41,10 @@ class PipelineResult(BaseModel):
     import_summary: ImportSummary
 
 
+class PipelineCancelled(RuntimeError):
+    """Raised when a build is cancelled at a safe chunk boundary."""
+
+
 class ExtractionPipeline:
     def __init__(
         self,
@@ -83,8 +87,14 @@ class ExtractionPipeline:
         provider: ExtractionProvider,
         *,
         attributes_only: bool = False,
+        on_progress: Callable[[int, int], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> PipelineResult:
         split = split_document(source)
+        total_chunks = len(split.chunks)
+        report_progress = on_progress or (lambda _completed, _total: None)
+        is_cancelled = should_cancel or (lambda: False)
+        report_progress(0, total_chunks)
         entities: dict[str, EntityRecord] = {}
         evidence: dict[str, EvidenceRecord] = {}
         facts: dict[str, FactRecord] = {}
@@ -93,7 +103,9 @@ class ExtractionPipeline:
         failed_chunks = 0
         successful_chunks = 0
         retry_count = 0
-        for chunk in split.chunks:
+        for completed_chunks, chunk in enumerate(split.chunks, start=1):
+            if is_cancelled():
+                raise PipelineCancelled("JOB_CANCELLED")
             try:
                 extracted, retries = self._extract_with_retries(
                     provider,
@@ -124,6 +136,9 @@ class ExtractionPipeline:
                     raise
                 failed_chunks += 1
                 rejections.update([error.code])
+                report_progress(completed_chunks, total_chunks)
+                if is_cancelled():
+                    raise PipelineCancelled("JOB_CANCELLED")
                 continue
             successful_chunks += 1
             if not attributes_only:
@@ -168,7 +183,12 @@ class ExtractionPipeline:
                 else:
                     attributes[item.id] = item
             rejections.update(item.code for item in normalized.rejections)
+            report_progress(completed_chunks, total_chunks)
+            if is_cancelled():
+                raise PipelineCancelled("JOB_CANCELLED")
 
+        if is_cancelled():
+            raise PipelineCancelled("JOB_CANCELLED")
         document = GraphDocument(
             project=ProjectRecord(id=project_id, title=title),
             chapters=[
@@ -194,7 +214,7 @@ class ExtractionPipeline:
         accepted_evidence = summary.retained_evidence
         return PipelineResult(
             quality=QualityReport(
-                total_chunks=len(split.chunks),
+                total_chunks=total_chunks,
                 successful_chunks=successful_chunks,
                 failed_chunks=failed_chunks,
                 accepted_entities=accepted_entities,
@@ -203,7 +223,7 @@ class ExtractionPipeline:
                 accepted_attributes=summary.retained_attributes,
                 accepted_attribute_evidence=summary.retained_attribute_evidence,
                 rejected_by_code=dict(rejections),
-                model_calls=len(split.chunks),
+                model_calls=total_chunks,
                 retry_count=retry_count,
             ),
             import_summary=summary,

@@ -113,6 +113,24 @@ def test_attribute_job_rejects_unknown_profile(tmp_path):
     assert response.json()["detail"]["code"] == "UNKNOWN_MODEL_PROFILE"
 
 
+def test_attribute_job_rejects_when_project_job_is_in_progress(tmp_path):
+    client, projects, jobs, _ = make_client(tmp_path)
+    user_project = next(
+        project for project in projects.list_projects() if not project.is_builtin
+    )
+    jobs.create(user_project.id, "fixed:test")
+
+    response = client.post(
+        f"/api/projects/{user_project.id}/attribute-jobs",
+        json={"model_profile_id": "fixed:test"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": {"code": "PROJECT_JOB_IN_PROGRESS"}
+    }
+
+
 def test_attribute_job_rejects_missing_stored_source_without_creating_job_or_event(tmp_path):
     client, projects, jobs, uploads = make_client(tmp_path)
     project = next(item for item in projects.list_projects() if not item.is_builtin)

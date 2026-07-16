@@ -1,4 +1,4 @@
-from app.jobs.models import Job, JobStatus, transition
+from app.jobs.models import InvalidJobTransition, Job, JobStatus, transition
 from app.jobs.models import TERMINAL_STATUSES
 from app.jobs.repository import JobRepository
 
@@ -31,6 +31,14 @@ class JobService:
 
     def cancel(self, job_id: str) -> Job:
         job = self.get(job_id)
+        if (
+            JobStatus(job.status) == JobStatus.IMPORTING
+            and job.total_chunks > 0
+            and job.completed_chunks >= job.total_chunks
+        ):
+            raise InvalidJobTransition(
+                f"{job.status}->{JobStatus.CANCELLED}"
+            )
         return self.repository.set_status(job_id, transition(job.status, JobStatus.CANCELLED))
 
     def retry(self, job_id: str) -> Job:

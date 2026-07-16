@@ -16,6 +16,10 @@ from app.jobs.models import (
 from app.projects.models import Base
 
 
+class ProjectJobInProgressError(RuntimeError):
+    pass
+
+
 class JobRepository:
     def __init__(
         self, engine: Engine, clock: Callable[[], datetime] | None = None
@@ -58,6 +62,21 @@ class JobRepository:
         kind: JobKind = JobKind.FULL_BUILD,
     ) -> Job:
         with Session(self.engine) as session:
+            if self.engine.dialect.name == "sqlite":
+                session.execute(text("BEGIN IMMEDIATE"))
+            active_job_id = session.scalar(
+                select(Job.id)
+                .where(
+                    Job.project_id == project_id,
+                    Job.status.not_in(
+                        [status.value for status in TERMINAL_STATUSES]
+                    ),
+                )
+                .limit(1)
+            )
+            if active_job_id is not None:
+                session.rollback()
+                raise ProjectJobInProgressError(project_id)
             job = Job(
                 project_id=project_id,
                 model_profile_id=model_profile_id,
@@ -69,6 +88,22 @@ class JobRepository:
             job_id = job.id
         self._append_event(job_id)
         return self.get_required(job_id)
+
+    def has_active_job(self, project_id: str) -> bool:
+        with Session(self.engine) as session:
+            return (
+                session.scalar(
+                    select(Job.id)
+                    .where(
+                        Job.project_id == project_id,
+                        Job.status.not_in(
+                            [status.value for status in TERMINAL_STATUSES]
+                        ),
+                    )
+                    .limit(1)
+                )
+                is not None
+            )
 
     def get(self, job_id: str) -> Job | None:
         with Session(self.engine) as session:
@@ -125,6 +160,37 @@ class JobRepository:
             session.commit()
         self._append_event(job_id)
         return self.get_required(job_id)
+
+    def update_progress(
+        self, job_id: str, completed_chunks: int, total_chunks: int
+    ) -> bool:
+        if (
+            completed_chunks < 0
+            or total_chunks < 0
+            or completed_chunks > total_chunks
+        ):
+            raise ValueError("INVALID_JOB_PROGRESS")
+        with Session(self.engine) as session:
+            if self.engine.dialect.name == "sqlite":
+                session.execute(text("BEGIN IMMEDIATE"))
+            job = session.get(Job, job_id)
+            if job is None:
+                raise LookupError(job_id)
+            if JobStatus(job.status) in TERMINAL_STATUSES:
+                session.rollback()
+                return False
+            if (
+                completed_chunks < job.completed_chunks
+                or total_chunks < job.total_chunks
+            ):
+                session.rollback()
+                raise ValueError("JOB_PROGRESS_REGRESSION")
+            job.completed_chunks = completed_chunks
+            job.total_chunks = total_chunks
+            job.updated_at = self.clock()
+            session.commit()
+        self._append_event(job_id)
+        return True
 
     def events_after(self, job_id: str, sequence: int) -> list[JobEvent]:
         with Session(self.engine) as session:

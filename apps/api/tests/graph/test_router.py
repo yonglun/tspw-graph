@@ -81,6 +81,35 @@ def test_search_rejects_excessive_limit() -> None:
     assert response.status_code == 422
 
 
+def test_timeline_participants_returns_event_connected_people() -> None:
+    class Repository:
+        def timeline_participants(self, project_id: str, limit: int):
+            return [
+                {
+                    "id": "feng",
+                    "project_id": project_id,
+                    "type": "Person",
+                    "name": "风清扬",
+                    "aliases": [],
+                    "description": "",
+                }
+            ]
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        response = TestClient(app).get(
+            "/api/graph/timeline/participants", params={"project_id": "p-1"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == "feng"
+    assert response.json()[0]["project_id"] == "p-1"
+    assert response.json()[0]["type"] == "Person"
+    assert response.json()[0]["name"] == "风清扬"
+
+
 def test_entity_detail_serializes_attributes_and_relations() -> None:
     class Repository:
         def entity_detail(self, project_id: str, entity_id: str):

@@ -26,6 +26,10 @@ class GraphRepository(Protocol):
         self, project_id: str, event_id: str
     ) -> dict[str, Any] | None: ...
 
+    def timeline_participants(
+        self, project_id: str, limit: int
+    ) -> list[dict[str, Any]]: ...
+
 
 class Neo4jGraphRepository:
     def __init__(self, driver: Driver) -> None:
@@ -464,6 +468,23 @@ class Neo4jGraphRepository:
                     limit=limit,
                 )
             ]
+
+    def timeline_participants(
+        self, project_id: str, limit: int
+    ) -> list[dict[str, Any]]:
+        statement = """
+            MATCH (event:Entity {project_id: $project_id})-[event_edge:RELATED]-(person:Entity {project_id: $project_id})
+            WHERE event.type IN ['Event', 'TeachingEvent']
+              AND person.type = 'Person'
+              AND coalesce(event.review_status, 'ACCEPTED') <> 'MERGED'
+              AND coalesce(person.review_status, 'ACCEPTED') <> 'MERGED'
+              AND coalesce(event_edge.review_status, 'ACCEPTED') <> 'REJECTED'
+            WITH DISTINCT person
+            RETURN properties(person) AS entity
+            ORDER BY person.name, person.id
+            LIMIT $limit
+        """
+        return self._entities(statement, project_id=project_id, limit=limit)
 
     def timeline_detail(
         self, project_id: str, event_id: str

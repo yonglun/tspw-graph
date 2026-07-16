@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   apiFetch,
   getTimelineDetail,
+  getTimelineParticipants,
   type EntitySummary,
   type TimelineEventDetail,
   type TimelineRelationship,
@@ -96,10 +97,15 @@ export function StoryPage() {
 
   useEffect(() => {
     setPerson('')
+    setPeople([])
     setExpandedId(undefined)
     setDetails({})
     detailRequest.current?.abort()
-    apiFetch<EntitySummary[]>(`/api/graph/search?project_id=${projectId}&query=${encodeURIComponent('令狐')}&types=Person`).then(setPeople).catch(() => setPeople([]))
+    const controller = new AbortController()
+    getTimelineParticipants(projectId, controller.signal)
+      .then((items) => { if (!controller.signal.aborted) setPeople(items) })
+      .catch(() => { if (!controller.signal.aborted) setPeople([]) })
+    return () => controller.abort()
   }, [projectId])
 
   useEffect(() => {

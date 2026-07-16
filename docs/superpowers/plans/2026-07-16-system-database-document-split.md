@@ -30,7 +30,7 @@
 - Consumes: 原数据库设计文档中的系统级章节和已批准拆分规格。
 - Produces: 一份独立可读的系统架构设计文档，供数据库设计文档交叉引用。
 
-- [ ] **Step 1: 写入文档元信息和相关文档链接**
+- [x] **Step 1: 写入文档元信息和相关文档链接**
 
 在文件开头写入：
 
@@ -44,7 +44,7 @@
 相关文档：[数据库设计](database-design.md)
 ```
 
-- [ ] **Step 2: 迁移总体架构和组件职责**
+- [x] **Step 2: 迁移总体架构和组件职责**
 
 从原文迁移并重新组织：
 
@@ -61,7 +61,7 @@
 ## 3. 组件职责与部署边界
 ```
 
-- [ ] **Step 3: 迁移端到端数据流和任务生命周期**
+- [x] **Step 3: 迁移端到端数据流和任务生命周期**
 
 迁移小说上传、文本规范化、任务领取、抽取、图导入、质量报告与完成状态的数据流，并补充：
 
@@ -75,7 +75,7 @@
 
 保留现有时序 Mermaid 图和状态边界说明。
 
-- [ ] **Step 4: 迁移跨存储一致性和审核流程**
+- [x] **Step 4: 迁移跨存储一致性和审核流程**
 
 新增以下系统级章节：
 
@@ -97,7 +97,7 @@
 - 别名拆分当前不迁移事实和属性，也不显式补建 `HAS_ENTITY`；
 - 项目删除按 Neo4j、上传目录、SQLite 的顺序执行，存在部分成功风险。
 
-- [ ] **Step 5: 迁移运维、安全和系统级演进章节**
+- [x] **Step 5: 迁移运维、安全和系统级演进章节**
 
 迁移并整理：
 
@@ -111,7 +111,7 @@
 
 系统级限制至少包含跨库事务、同项目重建不清理旧图、项目删除补偿、Neo4j Community 备份和端口暴露。
 
-- [ ] **Step 6: 验证系统架构文档章节**
+- [x] **Step 6: 验证系统架构文档章节**
 
 Run:
 
@@ -133,7 +133,7 @@ done
 
 Expected: 命令退出码为 0。
 
-- [ ] **Step 7: 提交系统架构文档**
+- [x] **Step 7: 提交系统架构文档**
 
 ```bash
 git add docs/system-architecture-design.md
@@ -152,7 +152,7 @@ git commit -m "docs: add system architecture design"
 - Consumes: Task 1 产生的系统架构设计文档。
 - Produces: 只承担数据组织、约束、查询和数据库演进职责的数据库设计文档。
 
-- [ ] **Step 1: 更新文档定位和交叉链接**
+- [x] **Step 1: 更新文档定位和交叉链接**
 
 在标题元信息后增加：
 
@@ -162,7 +162,7 @@ git commit -m "docs: add system architecture design"
 
 文档目标明确限定为 SQLite、Neo4j、数据映射、约束、索引、查询和数据库运维注意事项。
 
-- [ ] **Step 2: 保留数据库模型核心章节**
+- [x] **Step 2: 保留数据库模型核心章节**
 
 数据库文档保留并连续编号：
 
@@ -180,7 +180,7 @@ git commit -m "docs: add system architecture design"
 ## 附录 A：数据库代码定位
 ```
 
-- [ ] **Step 3: 删除已迁移的系统级正文**
+- [x] **Step 3: 删除已迁移的系统级正文**
 
 从数据库文档移除以下详细正文，并在需要处用一段摘要链接到系统架构文档：
 
@@ -193,7 +193,7 @@ git commit -m "docs: add system architecture design"
 
 数据库文档仍须保留与数据库直接相关的隔离键、外键、孤立节点和索引说明。
 
-- [ ] **Step 4: 保持 SQLite 覆盖完整**
+- [x] **Step 4: 保持 SQLite 覆盖完整**
 
 Run:
 
@@ -207,7 +207,7 @@ done
 
 Expected: 11 张表全部找到，退出码为 0。
 
-- [ ] **Step 5: 保持 Neo4j 覆盖完整**
+- [x] **Step 5: 保持 Neo4j 覆盖完整**
 
 Run:
 
@@ -221,7 +221,7 @@ done
 
 Expected: 6 类节点和 8 类关系全部找到，退出码为 0。
 
-- [ ] **Step 6: 验证查询示例和数据库限制仍存在**
+- [x] **Step 6: 验证查询示例和数据库限制仍存在**
 
 Run:
 
@@ -239,7 +239,7 @@ done
 
 Expected: 命令退出码为 0。
 
-- [ ] **Step 7: 提交数据库文档收敛**
+- [x] **Step 7: 提交数据库文档收敛**
 
 ```bash
 git add docs/database-design.md
@@ -260,7 +260,7 @@ git commit -m "docs: focus database design on data models"
 - Consumes: 已拆分的两份设计文档。
 - Produces: 通过结构、链接、内容覆盖和安全检查的最终文档集。
 
-- [ ] **Step 1: 检查双向链接**
+- [x] **Step 1: 检查双向链接**
 
 Run:
 
@@ -271,7 +271,7 @@ rg -q '\\[系统架构设计\\]\\(system-architecture-design.md\\)' docs/databas
 
 Expected: 两条命令均退出码为 0。
 
-- [ ] **Step 2: 检查代码围栏和 Mermaid 图**
+- [x] **Step 2: 检查代码围栏和 Mermaid 图**
 
 Run:
 
@@ -293,7 +293,7 @@ PY
 
 Expected: 输出 `markdown fences and Mermaid diagrams: ok`。
 
-- [ ] **Step 3: 检查仓库内 Markdown 链接**
+- [x] **Step 3: 检查仓库内 Markdown 链接**
 
 Run:
 
@@ -320,7 +320,7 @@ PY
 
 Expected: 输出 `local links: ok`。
 
-- [ ] **Step 4: 检查内容没有因拆分丢失**
+- [x] **Step 4: 检查内容没有因拆分丢失**
 
 Run:
 
@@ -340,7 +340,7 @@ done
 
 Expected: 所有关键事实至少存在于一份文档中。
 
-- [ ] **Step 5: 检查敏感信息和空白错误**
+- [x] **Step 5: 检查敏感信息和空白错误**
 
 Run:
 
@@ -353,7 +353,7 @@ git diff --check
 
 Expected: 两条命令均退出码为 0。
 
-- [ ] **Step 6: 更新规格和计划状态**
+- [x] **Step 6: 更新规格和计划状态**
 
 将拆分规格状态改为：
 
@@ -363,7 +363,7 @@ Expected: 两条命令均退出码为 0。
 
 仅在全部检查通过后，把本计划全部复选框更新为 `[x]`。
 
-- [ ] **Step 7: 提交最终验证状态**
+- [x] **Step 7: 提交最终验证状态**
 
 ```bash
 git add \

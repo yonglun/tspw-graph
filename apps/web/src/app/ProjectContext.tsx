@@ -3,13 +3,28 @@ import { useSearchParams } from 'react-router-dom'
 
 import { apiFetch, DEFAULT_PROJECT_ID, type ProjectSummary } from '../api/client'
 
-type ProjectContextValue = { projects: ProjectSummary[]; projectId: string; setProjectId: (id: string) => void; refreshProjects: () => Promise<void> }
+type ProjectContextValue = {
+  projects: ProjectSummary[]
+  projectId: string
+  setProjectId: (id: string) => void
+  refreshProjects: () => Promise<void>
+  projectSwitchLocked: boolean
+  setProjectSwitchLocked: (locked: boolean) => void
+}
 const ProjectContext = createContext<ProjectContextValue | undefined>(undefined)
-const fallbackProject: ProjectContextValue = { projects: [], projectId: DEFAULT_PROJECT_ID, setProjectId: () => undefined, refreshProjects: async () => undefined }
+const fallbackProject: ProjectContextValue = {
+  projects: [],
+  projectId: DEFAULT_PROJECT_ID,
+  setProjectId: () => undefined,
+  refreshProjects: async () => undefined,
+  projectSwitchLocked: false,
+  setProjectSwitchLocked: () => undefined,
+}
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [params, setParams] = useSearchParams()
   const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [projectSwitchLocked, setProjectSwitchLocked] = useState(false)
   const requestedProjectId = params.get('project') || DEFAULT_PROJECT_ID
   const userProjects = projects.filter(project => !project.is_builtin)
   const projectId = userProjects.length > 0 && requestedProjectId === DEFAULT_PROJECT_ID ? userProjects[0].id : requestedProjectId
@@ -28,7 +43,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (projectId === requestedProjectId) return
     setProjectId(projectId)
   }, [projectId, requestedProjectId, setProjectId])
-  const value = useMemo(() => ({ projects, projectId, setProjectId, refreshProjects }), [projects, projectId, setProjectId, refreshProjects])
+  const value = useMemo(
+    () => ({
+      projects,
+      projectId,
+      setProjectId,
+      refreshProjects,
+      projectSwitchLocked,
+      setProjectSwitchLocked,
+    }),
+    [
+      projects,
+      projectId,
+      setProjectId,
+      refreshProjects,
+      projectSwitchLocked,
+    ],
+  )
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
 }
 

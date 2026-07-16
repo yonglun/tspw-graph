@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 
 import { apiFetch, type ModelProfile, type ProjectCreated } from '../../api/client'
 
-export function UploadStep({ profiles, onCreated }: { profiles: ModelProfile[]; onCreated: (created: ProjectCreated) => void }) {
+export function UploadStep({ profiles, onCreated, disabled = false }: { profiles: ModelProfile[]; onCreated: (created: ProjectCreated) => void; disabled?: boolean }) {
   const [title, setTitle] = useState('')
   const [file, setFile] = useState<File>()
   const [profile, setProfile] = useState(profiles[0]?.id ?? '')
@@ -32,12 +32,14 @@ export function UploadStep({ profiles, onCreated }: { profiles: ModelProfile[]; 
     }
   }
 
-  return <form className="build-upload" onSubmit={submit} noValidate>
+  const locked = disabled || busy
+
+  return <form className="build-upload" onSubmit={submit} noValidate aria-busy={busy} aria-disabled={disabled}>
     <div><p className="eyebrow">01 · SOURCE</p><h2>选择小说文本</h2><p>支持 UTF-8、UTF-8-BOM 与 GB18030，单文件不超过 20 MB。</p></div>
-    <label>项目标题<input aria-label="项目标题" value={title} maxLength={300} required onChange={event => setTitle(event.target.value)} /></label>
-    <label>TXT 小说<input aria-label="TXT 小说" type="file" accept=".txt,text/plain" required onChange={event => setFile(event.target.files?.[0])} /></label>
-    <label>模型配置<select aria-label="模型配置" value={profile} required onChange={event => setProfile(event.target.value)}>{profiles.map(item => <option key={item.id} value={item.id} disabled={!item.available}>{item.provider} · {item.model}{item.available ? '' : '（不可用）'}</option>)}</select></label>
+    <label>项目标题<input aria-label="项目标题" value={title} maxLength={300} required disabled={locked} onChange={event => setTitle(event.target.value)} /></label>
+    <label>TXT 小说<input aria-label="TXT 小说" type="file" accept=".txt,text/plain" required disabled={locked} onChange={event => setFile(event.target.files?.[0])} /></label>
+    <label>模型配置<select aria-label="模型配置" value={profile} required disabled={locked} onChange={event => setProfile(event.target.value)}>{profiles.map(item => <option key={item.id} value={item.id} disabled={!item.available}>{item.provider} · {item.model}{item.available ? '' : '（不可用）'}</option>)}</select></label>
     {error && <p role="alert" className="error-state">{error}</p>}
-    <button className="primary" disabled={busy || !profile}>{busy ? '正在上传…' : '开始构建'}</button>
+    <button className="primary" disabled={locked || !profile}>{busy ? '正在上传…' : disabled ? '构建处理中' : '开始构建'}</button>
   </form>
 }

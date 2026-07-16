@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch, type JobSnapshot, type ModelProfile, type ProjectCreated, type QualityReport as Report } from '../../api/client'
 import { useProject } from '../../app/ProjectContext'
@@ -16,7 +16,7 @@ export function BuildPage() {
       .then(([job, project]) => setCreated({ job, project }))
       .catch(e => setError(e instanceof Error ? e.message : '无法恢复构建任务'))
   }, [created, params])
-  useEffect(() => {
+  useLayoutEffect(() => {
     setProjectSwitchLocked(processing)
     return () => setProjectSwitchLocked(false)
   }, [processing, setProjectSwitchLocked])

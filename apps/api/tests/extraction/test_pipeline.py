@@ -1,7 +1,12 @@
+from types import SimpleNamespace
+
+import pytest
+
 from app.extraction.fixed import FixedProvider
 from app.extraction.models import ExtractionResult
-from app.extraction.pipeline import ExtractionPipeline
+from app.extraction.pipeline import ExtractionPipeline, PipelineCancelled
 from app.extraction.providers import ProviderError, ProviderErrorKind
+from app.extraction.splitter import TextChunk
 from app.graph.importer import GraphImporter, canonicalize_attribute_rows
 from app.graph.models import ImportSummary
 
@@ -141,6 +146,95 @@ def test_pipeline_skips_content_filtered_chunks():
     assert output.quality.failed_chunks == 1
     assert output.quality.rejected_by_code == {"MODEL_CONTENT_FILTER": 1}
     assert output.quality.accepted_facts == 0
+
+
+def test_pipeline_reports_total_and_each_completed_chunk(monkeypatch):
+    chunks = [
+        TextChunk(
+            id="c-1",
+            chapter_number=1,
+            start_offset=0,
+            end_offset=3,
+            text="甲识乙",
+        ),
+        TextChunk(
+            id="c-2",
+            chapter_number=1,
+            start_offset=3,
+            end_offset=6,
+            text="丙识丁",
+        ),
+    ]
+    split = SimpleNamespace(chunks=chunks, chapters=[])
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document", lambda _: split
+    )
+    progress = []
+
+    ExtractionPipeline(GraphImporter(MemoryWriter())).process(
+        "p-1",
+        "测试",
+        "source",
+        EmptyProvider(),
+        on_progress=lambda completed, total: progress.append(
+            (completed, total)
+        ),
+    )
+
+    assert progress == [(0, 2), (1, 2), (2, 2)]
+
+
+def test_pipeline_counts_content_filtered_chunks_as_completed():
+    class ContentFilterProvider:
+        def extract(self, request):
+            raise ProviderError(
+                ProviderErrorKind.INVALID_RESPONSE,
+                "MODEL_CONTENT_FILTER",
+            )
+
+    progress = []
+    ExtractionPipeline(GraphImporter(MemoryWriter())).process(
+        "p-1",
+        "测试",
+        "第一章 开端\n甲识乙",
+        ContentFilterProvider(),
+        on_progress=lambda completed, total: progress.append(
+            (completed, total)
+        ),
+    )
+
+    assert progress == [(0, 1), (1, 1)]
+
+
+def test_pipeline_stops_before_import_when_cancelled_after_a_chunk(
+    monkeypatch,
+):
+    chunks = [
+        TextChunk(
+            id="c-1",
+            chapter_number=1,
+            start_offset=0,
+            end_offset=3,
+            text="甲识乙",
+        )
+    ]
+    split = SimpleNamespace(chunks=chunks, chapters=[])
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document", lambda _: split
+    )
+    writer = CapturingWriter()
+    checks = iter([False, True])
+
+    with pytest.raises(PipelineCancelled, match="JOB_CANCELLED"):
+        ExtractionPipeline(GraphImporter(writer)).process(
+            "p-1",
+            "测试",
+            "source",
+            EmptyProvider(),
+            should_cancel=lambda: next(checks, True),
+        )
+
+    assert writer.rows == {"Entity": [], "Fact": [], "Evidence": []}
 
 
 def test_pipeline_retries_retryable_provider_errors():

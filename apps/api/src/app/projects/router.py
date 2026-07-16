@@ -11,7 +11,7 @@ from app.auth.models import AdminAccount
 from app.graph.neo4j import Neo4jGraphWriter
 from app.graph.router import Repository, execute
 from app.jobs.models import JobKind
-from app.jobs.repository import JobRepository
+from app.jobs.repository import JobRepository, ProjectJobInProgressError
 from app.jobs.router import JobSnapshot
 from app.projects.files import InvalidUpload, UploadStore
 from app.projects.repository import ProjectRepository
@@ -106,6 +106,12 @@ def upload_project(
         raise HTTPException(status_code, detail={"code": code}) from error
     try:
         job = jobs.create(project.id, model_profile_id)
+    except ProjectJobInProgressError as error:
+        upload_service.uploads.delete_project(project.id)
+        upload_service.projects.delete(project.id)
+        raise HTTPException(
+            409, detail={"code": "PROJECT_JOB_IN_PROGRESS"}
+        ) from error
     except Exception:
         upload_service.uploads.delete_project(project.id)
         upload_service.projects.delete(project.id)
@@ -148,11 +154,16 @@ def create_attribute_job(
         profile.id for profile in get_settings().model_profiles
     }:
         raise HTTPException(422, detail={"code": "UNKNOWN_MODEL_PROFILE"})
-    job = jobs.create(
-        project_id,
-        request.model_profile_id,
-        JobKind.ATTRIBUTE_BACKFILL,
-    )
+    try:
+        job = jobs.create(
+            project_id,
+            request.model_profile_id,
+            JobKind.ATTRIBUTE_BACKFILL,
+        )
+    except ProjectJobInProgressError as error:
+        raise HTTPException(
+            409, detail={"code": "PROJECT_JOB_IN_PROGRESS"}
+        ) from error
     return JobSnapshot.model_validate(job)
 
 

@@ -43,7 +43,11 @@ ALLOWED_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.VALIDATING: {
         JobStatus.IMPORTING, JobStatus.PAUSED, JobStatus.FAILED, JobStatus.CANCELLED
     },
-    JobStatus.IMPORTING: {JobStatus.COMPLETED, JobStatus.FAILED},
+    JobStatus.IMPORTING: {
+        JobStatus.COMPLETED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    },
     JobStatus.PAUSED: {JobStatus.QUEUED, JobStatus.CANCELLED},
     JobStatus.FAILED: {JobStatus.QUEUED, JobStatus.CANCELLED},
 }

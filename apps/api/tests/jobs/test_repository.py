@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.exc import OperationalError
 
 from app.jobs.models import InvalidJobTransition, JobKind, JobStatus, transition
-from app.jobs.repository import JobRepository
+from app.jobs.repository import JobRepository, ProjectJobInProgressError
 
 
 class Clock:
@@ -184,3 +184,59 @@ def test_create_defaults_to_full_build_and_records_kind_in_event():
 
     assert job.kind == JobKind.FULL_BUILD
     assert repository.events_after(job.id, 0)[0].snapshot["kind"] == "FULL_BUILD"
+
+
+def test_create_rejects_a_second_active_job_for_the_same_project():
+    repository = JobRepository(create_engine("sqlite+pysqlite:///:memory:"))
+    repository.create("p-1", "fixed:test")
+
+    with pytest.raises(ProjectJobInProgressError, match="p-1"):
+        repository.create("p-1", "fixed:test", JobKind.ATTRIBUTE_BACKFILL)
+
+    repository.create("p-2", "fixed:test")
+
+
+def test_create_allows_a_new_job_after_the_previous_job_is_terminal():
+    repository = JobRepository(create_engine("sqlite+pysqlite:///:memory:"))
+    first = repository.create("p-1", "fixed:test")
+    repository.set_status(first.id, JobStatus.COMPLETED)
+
+    second = repository.create("p-1", "fixed:test")
+
+    assert second.id != first.id
+
+
+def test_update_progress_is_monotonic_and_emits_snapshots():
+    repository = JobRepository(create_engine("sqlite+pysqlite:///:memory:"))
+    job = repository.create("p-1", "fixed:test")
+
+    assert repository.update_progress(job.id, 0, 3) is True
+    assert repository.update_progress(job.id, 1, 3) is True
+    updated = repository.get_required(job.id)
+
+    assert (updated.completed_chunks, updated.total_chunks) == (1, 3)
+    assert repository.events_after(job.id, 0)[-1].snapshot[
+        "completed_chunks"
+    ] == 1
+
+
+@pytest.mark.parametrize("completed,total", [(2, 1), (-1, 1), (0, -1)])
+def test_update_progress_rejects_invalid_bounds(completed, total):
+    repository = JobRepository(create_engine("sqlite+pysqlite:///:memory:"))
+    job = repository.create("p-1", "fixed:test")
+
+    with pytest.raises(ValueError, match="INVALID_JOB_PROGRESS"):
+        repository.update_progress(job.id, completed, total)
+
+
+def test_update_progress_rejects_regression_and_ignores_terminal_jobs():
+    repository = JobRepository(create_engine("sqlite+pysqlite:///:memory:"))
+    job = repository.create("p-1", "fixed:test")
+    repository.update_progress(job.id, 2, 3)
+
+    with pytest.raises(ValueError, match="JOB_PROGRESS_REGRESSION"):
+        repository.update_progress(job.id, 1, 3)
+
+    repository.set_status(job.id, JobStatus.CANCELLED)
+    assert repository.update_progress(job.id, 3, 3) is False
+    assert repository.get_required(job.id).completed_chunks == 2

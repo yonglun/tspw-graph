@@ -49,3 +49,27 @@ def test_events_resume_after_last_event_id():
     assert "id: 2" in response.text
     assert "event: job" in response.text
     assert '"status":"COMPLETED"' in response.text
+
+
+def test_cancel_is_allowed_during_chunk_processing():
+    client, repository = make_client()
+    job = repository.create("p-1", "fixed:test")
+    repository.set_status(job.id, JobStatus.IMPORTING)
+    repository.update_progress(job.id, 1, 3)
+
+    response = client.post(f"/api/jobs/{job.id}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "CANCELLED"
+
+
+def test_cancel_is_rejected_after_all_chunks_finish():
+    client, repository = make_client()
+    job = repository.create("p-1", "fixed:test")
+    repository.set_status(job.id, JobStatus.IMPORTING)
+    repository.update_progress(job.id, 3, 3)
+
+    response = client.post(f"/api/jobs/{job.id}/cancel")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "INVALID_JOB_TRANSITION"

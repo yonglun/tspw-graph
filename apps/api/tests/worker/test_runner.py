@@ -8,7 +8,7 @@ from app.worker.online import OnlineBuildHandlers
 from app.projects.repository import ProjectRepository
 from app.projects.files import UploadStore
 from app.projects.service import ProjectUploadService
-from app.extraction.pipeline import ExtractionPipeline
+from app.extraction.pipeline import ExtractionPipeline, PipelineCancelled
 from app.graph.importer import GraphImporter, canonicalize_attribute_rows
 from app.graph.models import ImportSummary
 from app.settings import Settings
@@ -107,6 +107,24 @@ def test_runner_logs_unexpected_stage_failure(caplog):
     assert job.id in caplog.text
 
 
+def test_runner_preserves_terminal_status_set_by_handler():
+    repository = JobRepository(create_engine("sqlite+pysqlite:///:memory:"))
+    job = repository.create("p-1", "fixed:test")
+
+    def cancel_job(job):
+        repository.set_status(job.id, JobStatus.CANCELLED)
+
+    runner = WorkerRunner(
+        repository,
+        worker_id="w-1",
+        handlers={JobStatus.SPLITTING: cancel_job},
+    )
+
+    runner.run_once()
+
+    assert repository.get(job.id).status == JobStatus.CANCELLED
+
+
 def test_online_handlers_complete_fixed_provider_job(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'db.sqlite'}")
     projects = ProjectRepository(engine)
@@ -135,8 +153,51 @@ def test_online_handlers_complete_fixed_provider_job(tmp_path):
     runner = WorkerRunner(jobs, worker_id="w", handlers=handlers)
     for _ in range(5):
         runner.run_once()
-    assert jobs.get(job.id).status == JobStatus.COMPLETED
+    completed = jobs.get(job.id)
+    assert completed.status == JobStatus.COMPLETED
+    assert (completed.completed_chunks, completed.total_chunks) == (1, 1)
     assert jobs.get_quality(job.id)["total_chunks"] == 1
+    assert any(
+        event.snapshot["completed_chunks"] == 1
+        and event.snapshot["total_chunks"] == 1
+        for event in jobs.events_after(job.id, 0)
+    )
+
+
+def test_online_handler_stops_cleanly_when_pipeline_is_cancelled(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'db.sqlite'}")
+    projects = ProjectRepository(engine)
+    uploads = UploadStore(tmp_path / "uploads")
+    project = ProjectUploadService(projects, uploads).create(
+        title="测试",
+        filename="book.txt",
+        stream=BytesIO("第一章\n甲识乙".encode()),
+    )
+    jobs = JobRepository(engine)
+    job = jobs.create(project.id, "fixed:test")
+
+    class CancellingPipeline:
+        def process(self, *args, on_progress, should_cancel, **kwargs):
+            on_progress(0, 1)
+            jobs.set_status(job.id, JobStatus.CANCELLED)
+            assert should_cancel() is True
+            raise PipelineCancelled("JOB_CANCELLED")
+
+    handlers = OnlineBuildHandlers(
+        projects=projects,
+        jobs=jobs,
+        uploads=uploads,
+        pipeline=CancellingPipeline(),
+        settings=Settings(data_root=uploads.root),
+    ).mapping()
+    runner = WorkerRunner(jobs, worker_id="w", handlers=handlers)
+
+    for _ in range(5):
+        runner.run_once()
+
+    cancelled = jobs.get(job.id)
+    assert cancelled.status == JobStatus.CANCELLED
+    assert jobs.get_quality(job.id) is None
 
 
 def test_attribute_backfill_only_writes_attributes_and_their_evidence(tmp_path):

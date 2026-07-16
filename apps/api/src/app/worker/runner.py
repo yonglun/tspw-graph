@@ -2,7 +2,7 @@ from collections.abc import Callable, Mapping
 import logging
 
 from app.extraction.providers import ProviderError
-from app.jobs.models import Job, JobStatus
+from app.jobs.models import TERMINAL_STATUSES, Job, JobStatus
 from app.jobs.repository import JobRepository
 
 
@@ -41,8 +41,14 @@ class WorkerRunner:
             return True
         try:
             handler(job)
+            current = self.repository.get_required(job.id)
+            if JobStatus(current.status) in TERMINAL_STATUSES:
+                return True
             self.repository.set_status(job.id, NEXT_STATUS[job.status])
         except ProviderError as error:
+            current = self.repository.get_required(job.id)
+            if JobStatus(current.status) in TERMINAL_STATUSES:
+                return True
             logger.exception(
                 "Worker stage failed job_id=%s project_id=%s stage=%s error_code=%s",
                 job.id,
@@ -58,6 +64,9 @@ class WorkerRunner:
             )
             self.repository.set_status(job.id, JobStatus.FAILED, error_code=error.code)
         except Exception:
+            current = self.repository.get_required(job.id)
+            if JobStatus(current.status) in TERMINAL_STATUSES:
+                return True
             logger.exception(
                 "Worker stage failed job_id=%s project_id=%s stage=%s error_code=%s",
                 job.id,

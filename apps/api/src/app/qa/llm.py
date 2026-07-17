@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
+from app.extraction.azure_responses_client import AzureResponsesClient
 from app.extraction.providers import ProviderError, ProviderErrorKind, parse_retry_after_seconds
 from app.ontology.models import OntologyCatalog
 from app.qa.intents import QaIntent
@@ -14,6 +15,32 @@ from app.qa.intents import QaIntent
 
 logger = logging.getLogger(__name__)
 MIN_CONFIDENCE = 0.70
+
+
+def _allowed_ids(catalog: OntologyCatalog) -> tuple[list[str], list[str]]:
+    relation_ids = [item.id.value for item in catalog.relation_types]
+    property_ids = sorted(
+        {
+            prop.id
+            for entity in catalog.entity_types
+            for prop in entity.effective_property_definitions
+        }
+    )
+    return relation_ids, property_ids
+
+
+def _validate_intent(
+    intent: QaIntent, relation_ids: list[str], property_ids: list[str]
+) -> QaIntent:
+    if intent.confidence < MIN_CONFIDENCE:
+        raise ProviderError(
+            ProviderErrorKind.INVALID_RESPONSE, "QA_INTENT_LOW_CONFIDENCE"
+        )
+    if intent.relation is not None and intent.relation not in relation_ids:
+        raise ProviderError(ProviderErrorKind.INVALID_RESPONSE, "QA_INTENT_INVALID")
+    if intent.property is not None and intent.property not in property_ids:
+        raise ProviderError(ProviderErrorKind.INVALID_RESPONSE, "QA_INTENT_INVALID")
+    return intent
 
 
 class QaIntentProvider:
@@ -34,14 +61,7 @@ class QaIntentProvider:
         self.client = client or httpx.Client(timeout=timeout_seconds)
 
     def parse(self, question: str, catalog: OntologyCatalog) -> QaIntent:
-        relation_ids = [item.id.value for item in catalog.relation_types]
-        property_ids = sorted(
-            {
-                prop.id
-                for entity in catalog.entity_types
-                for prop in entity.effective_property_definitions
-            }
-        )
+        relation_ids, property_ids = _allowed_ids(catalog)
         try:
             response = self.client.post(
                 f"{self.base_url}/openai/deployments/{self.deployment}/chat/completions",
@@ -85,13 +105,7 @@ class QaIntentProvider:
             intent = QaIntent.model_validate_json(content)
         except (KeyError, TypeError, ValueError, ValidationError) as error:
             raise ProviderError(ProviderErrorKind.INVALID_RESPONSE, "MODEL_RESPONSE_INVALID") from error
-        if intent.confidence < MIN_CONFIDENCE:
-            raise ProviderError(ProviderErrorKind.INVALID_RESPONSE, "QA_INTENT_LOW_CONFIDENCE")
-        if intent.relation is not None and intent.relation not in relation_ids:
-            raise ProviderError(ProviderErrorKind.INVALID_RESPONSE, "QA_INTENT_INVALID")
-        if intent.property is not None and intent.property not in property_ids:
-            raise ProviderError(ProviderErrorKind.INVALID_RESPONSE, "QA_INTENT_INVALID")
-        return intent
+        return _validate_intent(intent, relation_ids, property_ids)
 
     @staticmethod
     def _system_prompt(relation_ids: list[str], property_ids: list[str]) -> str:
@@ -119,3 +133,45 @@ class QaIntentProvider:
             "required": ["intent", "subject", "relation", "property", "confidence"],
             "additionalProperties": False,
         }
+
+
+class QaResponsesIntentProvider:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        api_key: str,
+        timeout_seconds: float = 30,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.responses = AzureResponsesClient(
+            base_url=base_url,
+            model=model,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            client=client,
+        )
+
+    def parse(self, question: str, catalog: OntologyCatalog) -> QaIntent:
+        relation_ids, property_ids = _allowed_ids(catalog)
+        content = self.responses.generate_structured(
+            messages=[
+                {
+                    "role": "system",
+                    "content": QaIntentProvider._system_prompt(
+                        relation_ids, property_ids
+                    ),
+                },
+                {"role": "user", "content": question},
+            ],
+            format_name="qa_intent",
+            schema=QaIntentProvider._schema(relation_ids, property_ids),
+        )
+        try:
+            intent = QaIntent.model_validate_json(content)
+        except (TypeError, ValueError, ValidationError) as error:
+            raise ProviderError(
+                ProviderErrorKind.INVALID_RESPONSE, "MODEL_RESPONSE_INVALID"
+            ) from error
+        return _validate_intent(intent, relation_ids, property_ids)

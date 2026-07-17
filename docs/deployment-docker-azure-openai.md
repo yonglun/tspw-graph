@@ -88,6 +88,53 @@ AUTH_COOKIE_SECURE=false
 
 - `MODEL_PROFILES_JSON` 必须是合法 JSON，建议保持单行，避免 shell 或 `.env` 解析问题。
 - Azure OpenAI 的 `model` 字段填部署名。例如你在 Azure Portal 中创建的 deployment 叫 `kg-extractor-gpt4o-mini`，这里就填这个部署名。
+
+### Azure v1 Responses 模型
+
+Azure AI Foundry 中以 `/openai/v1/responses` 结尾的部署使用新的 Responses API。以 `gpt-5.6-sol` 为例，`.env` 可写为：
+
+```dotenv
+AZURE_OPENAI_API_KEY=replace-with-your-azure-openai-key
+MODEL_PROFILES_JSON=[{"id":"fixed:test","provider":"fixed","base_url":"","model":"deterministic-test","api_key_env":"","timeout_seconds":10},{"id":"azure:gpt-5.6-sol","provider":"azure-openai-responses","base_url":"https://dxp-5099-resource.services.ai.azure.com/openai/v1","model":"gpt-5.6-sol","api_key_env":"AZURE_OPENAI_API_KEY","timeout_seconds":180}]
+QA_MODEL_PROFILE_ID=azure:gpt-5.6-sol
+```
+
+- Azure 门户显示的完整 Endpoint 可能以 `/openai/v1/responses` 结尾；`base_url` 只填写到 `/openai/v1`。
+- `model` 必须填写 Deployment info 中的 Name。
+- `azure-openai-responses` 不填写 `api_version`，不会调用旧的 deployment-scoped Chat Completions URL。
+- `QA_MODEL_PROFILE_ID` 指向该 profile 后，同一个 deployment 也用于问答意图解析。
+- 原有 `azure-openai` profile 仍用于 `/chat/completions`，两种 profile 可以同时存在。
+
+更新 `.env` 后执行以下检查：
+
+```bash
+sudo docker compose config >/dev/null
+sudo docker compose up -d --build api worker
+sudo docker compose exec worker printenv MODEL_PROFILES_JSON
+sudo docker compose exec api printenv QA_MODEL_PROFILE_ID
+sudo docker compose exec worker sh -c 'test -n "$AZURE_OPENAI_API_KEY" && echo AZURE_OPENAI_API_KEY=set'
+curl -s http://localhost:5173/api/model-profiles
+```
+
+也可以在当前 Shell 已设置 `AZURE_OPENAI_API_KEY` 时直接冒烟测试端点；命令不会输出密钥：
+
+```bash
+AZURE_RESPONSES_ENDPOINT=https://dxp-5099-resource.services.ai.azure.com/openai/v1
+curl --fail-with-body --silent --show-error \
+  "${AZURE_RESPONSES_ENDPOINT}/responses" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${AZURE_OPENAI_API_KEY}" \
+  -d '{"model":"gpt-5.6-sol","input":"只回答 OK。","store":false}'
+```
+
+预期结果：
+
+- Compose 配置校验无错误。
+- Worker 的 profile 中包含 `azure-openai-responses`、`/openai/v1` 和正确 deployment name。
+- API 的 `QA_MODEL_PROFILE_ID` 等于新 profile ID。
+- 密钥检查只输出 `AZURE_OPENAI_API_KEY=set`，不会显示密钥值。
+- `/api/model-profiles` 中新 profile 的 `available` 为 `true`。
+- 直接 smoke test 返回 HTTP 2xx，响应顶层 `status` 为 `completed`，且 `output` 中包含模型文本。
 - 不要把真实密钥提交到 Git；`.env` 不应纳入版本管理。
 - `AUTH_BOOTSTRAP_*` 只在管理员表为空时生效。首次登录后系统强制修改临时密码。
 - 通过 HTTPS 域名部署时必须设置 `AUTH_COOKIE_SECURE=true`，然后重建 API 容器。

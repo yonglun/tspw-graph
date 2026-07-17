@@ -92,6 +92,15 @@ class ProviderRegistry:
                 api_key=self.secret_for(profile) or "",
                 timeout_seconds=profile.timeout_seconds,
             )
+        if profile.provider == "azure-openai-responses":
+            from app.extraction.azure_responses import AzureOpenAIResponsesProvider
+
+            return AzureOpenAIResponsesProvider(
+                base_url=profile.base_url,
+                model=profile.model,
+                api_key=self.secret_for(profile) or "",
+                timeout_seconds=profile.timeout_seconds,
+            )
         if profile.provider == "ollama":
             from app.extraction.ollama import OllamaProvider
 
@@ -104,16 +113,25 @@ class ProviderRegistry:
 
     def create_qa_intent(self, profile_id: str):
         profile = self.profile(profile_id)
-        if profile.provider != "azure-openai":
-            raise ProviderError(
-                ProviderErrorKind.CONFIGURATION, "QA_MODEL_PROFILE_UNSUPPORTED"
-            )
-        from app.qa.llm import QaIntentProvider
+        if profile.provider == "azure-openai":
+            from app.qa.llm import QaIntentProvider
 
-        return QaIntentProvider(
-            base_url=profile.base_url,
-            deployment=profile.model,
-            api_version=profile.api_version,
-            api_key=self.secret_for(profile) or "",
-            timeout_seconds=profile.timeout_seconds,
+            return QaIntentProvider(
+                base_url=profile.base_url,
+                deployment=profile.model,
+                api_version=profile.api_version,
+                api_key=self.secret_for(profile) or "",
+                timeout_seconds=profile.timeout_seconds,
+            )
+        if profile.provider == "azure-openai-responses":
+            from app.qa.llm import QaResponsesIntentProvider
+
+            return QaResponsesIntentProvider(
+                base_url=profile.base_url,
+                model=profile.model,
+                api_key=self.secret_for(profile) or "",
+                timeout_seconds=profile.timeout_seconds,
+            )
+        raise ProviderError(
+            ProviderErrorKind.CONFIGURATION, "QA_MODEL_PROFILE_UNSUPPORTED"
         )

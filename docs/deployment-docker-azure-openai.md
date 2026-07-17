@@ -143,6 +143,51 @@ curl --fail-with-body --silent --show-error \
 - `AUTH_BOOTSTRAP_*` 只在管理员表为空时生效。首次登录后系统强制修改临时密码。
 - 通过 HTTPS 域名部署时必须设置 `AUTH_COOKIE_SECURE=true`，然后重建 API 容器。
 
+### 模型请求受控并发
+
+完整小说会被拆分为多个片段。Worker 可以并发调用模型，以缩短总构建时间；并发仅作用于模型 HTTP 请求，结果仍按原文片段顺序合并，SQLite 状态更新和 Neo4j 导入仍由 Worker 主线程串行完成。
+
+在 `.env` 中增加：
+
+```dotenv
+# 每个 Worker 进程允许同时执行的模型请求数，范围 1–16。
+EXTRACTION_CONCURRENCY=4
+```
+
+建议从 `4` 开始，根据 Azure 部署的 TPM、RPM、429 比例和服务器日志逐步调节：
+
+- `1`：完全串行，也是未配置时的默认值；
+- `2`：额度较低或 429 较多时的保守配置；
+- `4`：Responses 模型的推荐初始生产配置；
+- 更高值会更快消耗 TPM/RPM，并不保证同比提速。
+
+应用并验证配置：
+
+```bash
+sudo docker compose config
+sudo docker compose up -d --build worker
+sudo docker compose exec worker printenv EXTRACTION_CONCURRENCY
+sudo docker compose logs -f worker
+```
+
+`docker compose config` 只解析并校验最终 Compose 配置，不会启动或修改容器。日志中会出现批次的 `chunks`、`concurrency`，以及每个 Azure Responses 请求的 `duration_seconds`、Token 用量和 request ID。
+
+任务取消时，Worker 会停止提交新片段并取消尚未开始的请求。同步 HTTP 请求一旦开始不能被强制中断，因此最多仍需等待当前在途请求正常结束或达到 profile 的 `timeout_seconds`；这些结果会被丢弃，任务不会导入部分图谱。发生致命模型错误时采用相同的“停止提交、等待在途、禁止部分导入”策略。
+
+如出现持续 429、响应延迟上升或额度压力，先回退并发度：
+
+```dotenv
+EXTRACTION_CONCURRENCY=2
+```
+
+若需完全恢复旧的串行执行方式：
+
+```dotenv
+EXTRACTION_CONCURRENCY=1
+```
+
+修改后重新构建或重建 Worker 容器即可生效。
+
 ## 5. 启动服务
 
 ```bash

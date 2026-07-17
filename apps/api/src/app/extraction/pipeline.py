@@ -1,5 +1,7 @@
 from collections import Counter
 from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass
 import logging
 import time
 
@@ -13,7 +15,7 @@ from app.extraction.providers import (
     ProviderErrorKind,
 )
 from app.extraction.rules import rule_based_extract
-from app.extraction.splitter import split_document
+from app.extraction.splitter import TextChunk, split_document
 from app.graph.importer import GraphImporter
 from app.graph.models import (
     AttributeAssertionRecord, ChapterRecord, EntityRecord, EvidenceRecord,
@@ -49,6 +51,15 @@ class PipelineCancelled(RuntimeError):
     """Raised when a build is cancelled at a safe chunk boundary."""
 
 
+@dataclass(frozen=True)
+class ChunkExtractionOutcome:
+    index: int
+    chunk: TextChunk
+    extracted: ExtractionResult | None
+    retries: int = 0
+    error_code: str | None = None
+
+
 class ExtractionPipeline:
     def __init__(
         self,
@@ -57,11 +68,15 @@ class ExtractionPipeline:
         max_retries: int = 3,
         retry_backoff_seconds: float = 5.0,
         retry_sleep: Callable[[float], None] = time.sleep,
+        concurrency: int = 1,
     ) -> None:
+        if not 1 <= concurrency <= 16:
+            raise ValueError("concurrency must be between 1 and 16")
         self.importer = importer
         self.max_retries = max_retries
         self.retry_backoff_seconds = retry_backoff_seconds
         self.retry_sleep = retry_sleep
+        self.concurrency = concurrency
 
     def _retry_delay(self, error: ProviderError, retry_number: int) -> float:
         if error.retry_after_seconds is not None:
@@ -102,6 +117,137 @@ class ExtractionPipeline:
                 )
                 self.retry_sleep(delay)
 
+    def _extract_chunk(
+        self,
+        index: int,
+        chunk: TextChunk,
+        provider: ExtractionProvider,
+        request: ExtractionRequest,
+    ) -> ChunkExtractionOutcome:
+        try:
+            extracted, retries = self._extract_with_retries(provider, request)
+        except ProviderError as error:
+            if error.code != "MODEL_CONTENT_FILTER":
+                raise
+            return ChunkExtractionOutcome(
+                index=index,
+                chunk=chunk,
+                extracted=None,
+                error_code=error.code,
+            )
+        return ChunkExtractionOutcome(
+            index=index,
+            chunk=chunk,
+            extracted=extracted,
+            retries=retries,
+        )
+
+    def _extract_chunks(
+        self,
+        project_id: str,
+        chunks: list[TextChunk],
+        provider: ExtractionProvider,
+        ontology: dict,
+        report_progress: Callable[[int, int], None],
+        is_cancelled: Callable[[], bool],
+    ) -> list[ChunkExtractionOutcome]:
+        total_chunks = len(chunks)
+        if is_cancelled():
+            raise PipelineCancelled("JOB_CANCELLED")
+        if not chunks:
+            return []
+
+        logger.info(
+            "Extraction batch started project_id=%s chunks=%s concurrency=%s",
+            project_id,
+            total_chunks,
+            self.concurrency,
+        )
+        executor = ThreadPoolExecutor(
+            max_workers=self.concurrency,
+            thread_name_prefix="extraction",
+        )
+        pending: dict[Future[ChunkExtractionOutcome], tuple[int, TextChunk]] = {}
+        outcomes: list[ChunkExtractionOutcome] = []
+        next_index = 0
+        completed = 0
+
+        def submit_available() -> None:
+            nonlocal next_index
+            while next_index < total_chunks and len(pending) < self.concurrency:
+                if is_cancelled():
+                    raise PipelineCancelled("JOB_CANCELLED")
+                index = next_index
+                chunk = chunks[index]
+                request = ExtractionRequest(
+                    project_id=project_id,
+                    chunk_id=chunk.id,
+                    text=chunk.text,
+                    ontology=ontology,
+                )
+                future = executor.submit(
+                    self._extract_chunk,
+                    index,
+                    chunk,
+                    provider,
+                    request,
+                )
+                pending[future] = (index, chunk)
+                next_index += 1
+
+        try:
+            submit_available()
+            while pending:
+                completed_futures, _ = wait(
+                    pending,
+                    return_when=FIRST_COMPLETED,
+                )
+                for future in completed_futures:
+                    index, chunk = pending.pop(future)
+                    try:
+                        outcome = future.result()
+                    except ProviderError as error:
+                        logger.error(
+                            "Extraction batch failed project_id=%s "
+                            "chunk_id=%s code=%s",
+                            project_id,
+                            chunk.id,
+                            error.code,
+                            exc_info=True,
+                        )
+                        raise
+                    except Exception:
+                        logger.exception(
+                            "Extraction batch failed project_id=%s chunk_id=%s",
+                            project_id,
+                            chunk.id,
+                        )
+                        raise
+                    outcomes.append(outcome)
+                    completed += 1
+                    report_progress(completed, total_chunks)
+                if is_cancelled():
+                    raise PipelineCancelled("JOB_CANCELLED")
+                submit_available()
+        except PipelineCancelled:
+            logger.info(
+                "Extraction batch cancelled project_id=%s completed=%s total=%s",
+                project_id,
+                completed,
+                total_chunks,
+            )
+            for future in pending:
+                future.cancel()
+            raise
+        except Exception:
+            for future in pending:
+                future.cancel()
+            raise
+        finally:
+            executor.shutdown(wait=True, cancel_futures=True)
+
+        return sorted(outcomes, key=lambda outcome: outcome.index)
+
     def process(
         self,
         project_id: str,
@@ -126,43 +272,35 @@ class ExtractionPipeline:
         failed_chunks = 0
         successful_chunks = 0
         retry_count = 0
-        for completed_chunks, chunk in enumerate(split.chunks, start=1):
-            if is_cancelled():
-                raise PipelineCancelled("JOB_CANCELLED")
-            try:
-                extracted, retries = self._extract_with_retries(
-                    provider,
-                    ExtractionRequest(
-                        project_id=project_id,
-                        chunk_id=chunk.id,
-                        text=chunk.text,
-                        ontology={
-                            "entity_types": [
-                                item.id.value for item in CATALOG.entity_types
-                            ],
-                            "relation_types": [
-                                item.id.value for item in CATALOG.relation_types
-                            ],
-                            "property_definitions": {
-                                item.id.value: [
-                                    definition.model_dump(mode="json")
-                                    for definition in item.effective_property_definitions
-                                ]
-                                for item in CATALOG.entity_types
-                            },
-                        },
-                    ),
-                )
-                retry_count += retries
-            except ProviderError as error:
-                if error.code != "MODEL_CONTENT_FILTER":
-                    raise
+        ontology = {
+            "entity_types": [item.id.value for item in CATALOG.entity_types],
+            "relation_types": [item.id.value for item in CATALOG.relation_types],
+            "property_definitions": {
+                item.id.value: [
+                    definition.model_dump(mode="json")
+                    for definition in item.effective_property_definitions
+                ]
+                for item in CATALOG.entity_types
+            },
+        }
+        outcomes = self._extract_chunks(
+            project_id,
+            list(split.chunks),
+            provider,
+            ontology,
+            report_progress,
+            is_cancelled,
+        )
+        for outcome in outcomes:
+            chunk = outcome.chunk
+            retry_count += outcome.retries
+            if outcome.error_code:
                 failed_chunks += 1
-                rejections.update([error.code])
-                report_progress(completed_chunks, total_chunks)
-                if is_cancelled():
-                    raise PipelineCancelled("JOB_CANCELLED")
+                rejections.update([outcome.error_code])
                 continue
+            extracted = outcome.extracted
+            if extracted is None:
+                raise RuntimeError("missing extraction result")
             successful_chunks += 1
             if not attributes_only:
                 extracted = rule_based_extract(chunk, extracted)
@@ -206,9 +344,6 @@ class ExtractionPipeline:
                 else:
                     attributes[item.id] = item
             rejections.update(item.code for item in normalized.rejections)
-            report_progress(completed_chunks, total_chunks)
-            if is_cancelled():
-                raise PipelineCancelled("JOB_CANCELLED")
 
         if is_cancelled():
             raise PipelineCancelled("JOB_CANCELLED")

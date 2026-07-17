@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     auth_login_max_failures: int = 5
     auth_login_lock_seconds: int = 15 * 60
     auth_trust_forwarded_ip: bool = False
+    extraction_concurrency: int = Field(default=1, ge=1, le=16)
     qa_model_profile_id: str = "azure:gpt-4o-mini"
     model_profiles: list[ModelProfileSettings] = Field(
         default_factory=lambda: [

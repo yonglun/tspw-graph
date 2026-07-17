@@ -1,7 +1,27 @@
 import pytest
 from pydantic import ValidationError
 
-from app.settings import ModelProfileSettings
+from app.settings import ModelProfileSettings, Settings
+
+
+def test_extraction_concurrency_defaults_to_one(monkeypatch):
+    monkeypatch.delenv("EXTRACTION_CONCURRENCY", raising=False)
+
+    assert Settings(_env_file=None).extraction_concurrency == 1
+
+
+def test_extraction_concurrency_reads_environment(monkeypatch):
+    monkeypatch.setenv("EXTRACTION_CONCURRENCY", "4")
+
+    assert Settings(_env_file=None).extraction_concurrency == 4
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "17"])
+def test_extraction_concurrency_rejects_out_of_range(monkeypatch, value):
+    monkeypatch.setenv("EXTRACTION_CONCURRENCY", value)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
 
 def test_responses_profile_accepts_performance_controls():

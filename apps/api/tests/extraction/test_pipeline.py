@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+from threading import Barrier, Event, Lock
+import time
 
 import pytest
 
@@ -56,6 +58,226 @@ class CapturingWriter(MemoryWriter):
 class EmptyProvider:
     def extract(self, request):
         return ExtractionResult(entities=[], facts=[])
+
+
+def split_with_chunks(*texts):
+    chunks = []
+    offset = 0
+    for index, text in enumerate(texts, start=1):
+        chunks.append(
+            TextChunk(
+                id=f"c-{index}",
+                chapter_number=1,
+                start_offset=offset,
+                end_offset=offset + len(text),
+                text=text,
+            )
+        )
+        offset += len(text)
+    return SimpleNamespace(
+        chunks=chunks,
+        chapters=[SimpleNamespace(number=1, title="测试")],
+    )
+
+
+class ConcurrencyTrackingProvider:
+    def __init__(self, parties=None):
+        self.barrier = Barrier(parties, timeout=2) if parties else None
+        self.lock = Lock()
+        self.active = 0
+        self.peak = 0
+
+    def extract(self, request):
+        with self.lock:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+        try:
+            if self.barrier:
+                self.barrier.wait()
+            return ExtractionResult()
+        finally:
+            with self.lock:
+                self.active -= 1
+
+
+def test_pipeline_limits_parallel_provider_calls(monkeypatch):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("甲", "乙", "丙", "丁"),
+    )
+    provider = ConcurrencyTrackingProvider(parties=4)
+
+    ExtractionPipeline(
+        GraphImporter(MemoryWriter()), concurrency=4
+    ).process("p-1", "测试", "source", provider)
+
+    assert provider.peak == 4
+
+
+def test_pipeline_concurrency_one_remains_serial(monkeypatch):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("甲", "乙", "丙"),
+    )
+    provider = ConcurrencyTrackingProvider()
+
+    ExtractionPipeline(
+        GraphImporter(MemoryWriter()), concurrency=1
+    ).process("p-1", "测试", "source", provider)
+
+    assert provider.peak == 1
+
+
+def test_pipeline_merges_results_in_source_order(monkeypatch):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("甲", "乙", "丙"),
+    )
+
+    class ReverseCompletionProvider:
+        def extract(self, request):
+            delay = {"c-1": 0.06, "c-2": 0.03, "c-3": 0.0}[request.chunk_id]
+            time.sleep(delay)
+            return ExtractionResult.model_validate(
+                {
+                    "entities": [
+                        {
+                            "local_id": request.chunk_id,
+                            "name": request.text,
+                            "type": "Person",
+                        }
+                    ]
+                }
+            )
+
+    writer = CapturingWriter()
+    ExtractionPipeline(GraphImporter(writer), concurrency=3).process(
+        "p-1", "测试", "source", ReverseCompletionProvider()
+    )
+
+    assert [row["name"] for row in writer.rows["Entity"]] == ["甲", "乙", "丙"]
+
+
+def test_concurrent_retry_does_not_block_another_slot(monkeypatch):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("慢", "快"),
+    )
+    slow_started = Event()
+    fast_finished = Event()
+    calls = []
+    lock = Lock()
+
+    class RetryIsolationProvider:
+        def extract(self, request):
+            with lock:
+                calls.append(request.chunk_id)
+                attempt = calls.count(request.chunk_id)
+            if request.chunk_id == "c-1" and attempt == 1:
+                slow_started.set()
+                raise ProviderError(
+                    ProviderErrorKind.RETRYABLE,
+                    "MODEL_HTTP_429",
+                    retry_after_seconds=0.05,
+                )
+            if request.chunk_id == "c-2":
+                assert slow_started.wait(timeout=1)
+                fast_finished.set()
+            return ExtractionResult()
+
+    def retry_sleep(_delay):
+        assert fast_finished.wait(timeout=1)
+
+    output = ExtractionPipeline(
+        GraphImporter(MemoryWriter()),
+        concurrency=2,
+        retry_sleep=retry_sleep,
+    ).process("p-1", "测试", "source", RetryIsolationProvider())
+
+    assert calls == ["c-1", "c-2", "c-1"]
+    assert output.quality.retry_count == 1
+
+
+def test_concurrent_cancellation_stops_new_submissions(monkeypatch, caplog):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("甲", "乙", "丙", "丁"),
+    )
+    both_started = Event()
+    barrier = Barrier(2, action=both_started.set, timeout=2)
+
+    class BlockingProvider:
+        def __init__(self):
+            self.calls = []
+            self.lock = Lock()
+
+        def extract(self, request):
+            with self.lock:
+                self.calls.append(request.chunk_id)
+            barrier.wait()
+            return ExtractionResult()
+
+    provider = BlockingProvider()
+    writer = CapturingWriter()
+    with caplog.at_level("INFO"), pytest.raises(
+        PipelineCancelled, match="JOB_CANCELLED"
+    ):
+        ExtractionPipeline(GraphImporter(writer), concurrency=2).process(
+            "p-1",
+            "测试",
+            "source",
+            provider,
+            should_cancel=both_started.is_set,
+        )
+
+    assert provider.calls == ["c-1", "c-2"]
+    assert writer.rows == {"Entity": [], "Fact": [], "Evidence": []}
+    assert "Extraction batch cancelled" in caplog.text
+
+
+def test_concurrent_fatal_error_drains_in_flight_without_import(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("坏", "在途", "未提交"),
+    )
+    barrier = Barrier(2, timeout=2)
+    in_flight_finished = Event()
+
+    class FatalProvider:
+        def __init__(self):
+            self.calls = []
+            self.lock = Lock()
+
+        def extract(self, request):
+            with self.lock:
+                self.calls.append(request.chunk_id)
+            barrier.wait()
+            if request.chunk_id == "c-1":
+                raise ProviderError(
+                    ProviderErrorKind.INVALID_RESPONSE,
+                    "MODEL_RESPONSE_INVALID",
+                )
+            time.sleep(0.05)
+            in_flight_finished.set()
+            return ExtractionResult()
+
+    provider = FatalProvider()
+    writer = CapturingWriter()
+    with caplog.at_level("ERROR"), pytest.raises(
+        ProviderError, match="MODEL_RESPONSE_INVALID"
+    ):
+        ExtractionPipeline(GraphImporter(writer), concurrency=2).process(
+            "p-1", "测试", "source", provider
+        )
+
+    assert provider.calls == ["c-1", "c-2"]
+    assert in_flight_finished.is_set()
+    assert writer.rows == {"Entity": [], "Fact": [], "Evidence": []}
+    assert "chunk_id=c-1" in caplog.text
+    assert "code=MODEL_RESPONSE_INVALID" in caplog.text
+    assert "坏" not in caplog.text
 
 
 def test_pipeline_sends_effective_property_definitions_to_provider():
@@ -369,6 +591,83 @@ def test_attribute_only_pipeline_imports_only_attribute_evidence():
     assert output.import_summary.created_facts == 0
     assert output.import_summary.created_evidence == 1
     assert output.import_summary.created_attributes == 1
+
+
+def test_attribute_only_pipeline_uses_configured_concurrency(monkeypatch):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("甲", "乙"),
+    )
+    barrier = Barrier(2, timeout=2)
+    lock = Lock()
+
+    class AttributeProvider:
+        def __init__(self):
+            self.active = 0
+            self.peak = 0
+
+        def extract(self, request):
+            with lock:
+                self.active += 1
+                self.peak = max(self.peak, self.active)
+            try:
+                barrier.wait()
+                return ExtractionResult.model_validate(
+                    {
+                        "entities": [
+                            {
+                                "local_id": request.chunk_id,
+                                "name": request.text,
+                                "type": "Person",
+                            }
+                        ],
+                        "attributes": [
+                            {
+                                "entity_local_id": request.chunk_id,
+                                "property_id": "identity",
+                                "value": "人物",
+                                "evidence": {
+                                    "start": 0,
+                                    "end": 1,
+                                    "quote": request.text,
+                                },
+                            }
+                        ],
+                    }
+                )
+            finally:
+                with lock:
+                    self.active -= 1
+
+    class AttributeWriter(MemoryWriter):
+        def __init__(self):
+            super().__init__()
+            self.labels = []
+
+        def upsert_batch(self, label, rows):
+            self.labels.append(label)
+            return super().upsert_batch(label, rows)
+
+        def resolve_attribute_entities(self, project_id, hints):
+            return {hint["id"]: hint["id"] for hint in hints}
+
+    provider = AttributeProvider()
+    writer = AttributeWriter()
+    output = ExtractionPipeline(
+        GraphImporter(writer), concurrency=2
+    ).process(
+        "p-1",
+        "测试",
+        "source",
+        provider,
+        attributes_only=True,
+    )
+
+    assert provider.peak == 2
+    assert set(writer.labels) == {"Evidence", "AttributeAssertion"}
+    assert output.quality.accepted_entities == 0
+    assert output.quality.accepted_facts == 0
+    assert output.quality.accepted_attributes == 2
 
 
 def test_attribute_only_quality_counts_only_resolved_assertions_and_evidence():

@@ -1,5 +1,6 @@
 from collections import Counter
 from collections.abc import Callable
+import logging
 import time
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,9 @@ from app.graph.models import (
     FactRecord, GraphDocument, ImportSummary, ProjectRecord,
 )
 from app.ontology.catalog import CATALOG
+
+
+logger = logging.getLogger(__name__)
 
 
 class QualityReport(BaseModel):
@@ -74,10 +78,29 @@ class ExtractionPipeline:
             try:
                 return provider.extract(request), retries
             except ProviderError as error:
-                if error.kind != ProviderErrorKind.RETRYABLE or retries >= self.max_retries:
+                if error.kind != ProviderErrorKind.RETRYABLE:
+                    raise
+                if retries >= self.max_retries:
+                    logger.warning(
+                        "Extraction request retry exhausted chunk_id=%s "
+                        "code=%s retries=%s",
+                        request.chunk_id,
+                        error.code,
+                        retries,
+                    )
                     raise
                 retries += 1
-                self.retry_sleep(self._retry_delay(error, retries))
+                delay = self._retry_delay(error, retries)
+                logger.warning(
+                    "Extraction request retry scheduled chunk_id=%s "
+                    "code=%s retry=%s/%s delay_seconds=%.2f",
+                    request.chunk_id,
+                    error.code,
+                    retries,
+                    self.max_retries,
+                    delay,
+                )
+                self.retry_sleep(delay)
 
     def process(
         self,

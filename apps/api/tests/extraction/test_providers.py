@@ -71,6 +71,8 @@ def test_registry_builds_responses_qa_provider(monkeypatch):
                 base_url="https://resource.services.ai.azure.com/openai/v1",
                 model="gpt-5.6-sol",
                 api_key_env="TEST_MODEL_KEY",
+                reasoning_effort="low",
+                max_output_tokens=12000,
             )
         )
     )
@@ -78,6 +80,31 @@ def test_registry_builds_responses_qa_provider(monkeypatch):
     result = registry.create_qa_intent("azure:responses")
 
     assert isinstance(result, QaResponsesIntentProvider)
+    assert result.responses.reasoning_effort == "low"
+    assert result.responses.max_output_tokens == 12000
+
+
+def test_registry_passes_responses_performance_controls(monkeypatch):
+    monkeypatch.setenv("TEST_MODEL_KEY", "secret")
+    registry = ProviderRegistry(
+        settings_with(
+            ModelProfileSettings(
+                id="azure:responses",
+                provider="azure-openai-responses",
+                base_url="https://resource.services.ai.azure.com/openai/v1",
+                model="gpt-5.6-sol",
+                api_key_env="TEST_MODEL_KEY",
+                reasoning_effort="low",
+                max_output_tokens=12000,
+            )
+        )
+    )
+
+    result = registry.create("azure:responses")
+
+    assert isinstance(result, AzureOpenAIResponsesProvider)
+    assert result.responses.reasoning_effort == "low"
+    assert result.responses.max_output_tokens == 12000
 
 
 def test_fixed_provider_extracts_deterministic_e2e_fixture():

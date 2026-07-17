@@ -1,3 +1,4 @@
+import logging
 import time
 from uuid import uuid4
 
@@ -14,7 +15,16 @@ from app.worker.online import OnlineBuildHandlers
 from app.worker.runner import WorkerRunner
 
 
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 def main() -> None:
+    configure_logging()
     settings = get_settings()
     engine = create_engine(settings.sqlite_url)
     jobs = JobRepository(engine)

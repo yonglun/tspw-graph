@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,6 +14,10 @@ class ModelProfileSettings(BaseModel):
     api_key_env: str = ""
     api_version: str = "2024-06-01"
     timeout_seconds: float = 60
+    reasoning_effort: Literal[
+        "none", "minimal", "low", "medium", "high", "xhigh"
+    ] | None = None
+    max_output_tokens: int | None = Field(default=None, gt=0)
 
 
 class Settings(BaseSettings):

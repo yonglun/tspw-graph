@@ -21,11 +21,19 @@ def completed_response(*texts: str) -> dict:
     }
 
 
-def client_for(transport: httpx.BaseTransport, *, api_key: str = "secret"):
+def client_for(
+    transport: httpx.BaseTransport,
+    *,
+    api_key: str = "secret",
+    reasoning_effort: str | None = None,
+    max_output_tokens: int | None = None,
+):
     return AzureResponsesClient(
         base_url="https://resource.services.ai.azure.com/openai/v1/",
         model="gpt-5.6-sol",
         api_key=api_key,
+        reasoning_effort=reasoning_effort,
+        max_output_tokens=max_output_tokens,
         client=httpx.Client(transport=transport),
     )
 
@@ -67,6 +75,84 @@ def test_posts_native_responses_structured_output_contract():
     assert "response_format" not in body
     assert "api-version" not in sent.url.params
     assert result == '{"ok":true}'
+
+
+def test_posts_configured_reasoning_effort_and_output_limit():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=completed_response('{"ok":true}'))
+
+    client = client_for(
+        httpx.MockTransport(handler),
+        reasoning_effort="low",
+        max_output_tokens=12000,
+    )
+
+    client.generate_structured(
+        messages=[{"role": "user", "content": "Question"}],
+        format_name="test_output",
+        schema={"type": "object"},
+    )
+
+    assert captured["body"]["reasoning"] == {"effort": "low"}
+    assert captured["body"]["max_output_tokens"] == 12000
+
+
+def test_logs_success_latency_request_id_and_usage(caplog):
+    payload = completed_response('{"ok":true}')
+    payload.update(
+        {
+            "id": "resp-123",
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "output_tokens_details": {"reasoning_tokens": 8},
+            },
+        }
+    )
+    client = client_for(
+        httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    )
+
+    with caplog.at_level("INFO"):
+        client.generate_structured(
+            messages=[{"role": "user", "content": "private novel text"}],
+            format_name="test_output",
+            schema={"type": "object"},
+        )
+
+    assert "Azure Responses request completed" in caplog.text
+    assert "format=test_output" in caplog.text
+    assert "request_id=resp-123" in caplog.text
+    assert "input_tokens=100" in caplog.text
+    assert "output_tokens=20" in caplog.text
+    assert "reasoning_tokens=8" in caplog.text
+    assert "private novel text" not in caplog.text
+
+
+def test_logs_network_errors_with_duration_and_without_key(caplog):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("request timed out", request=request)
+
+    client = client_for(
+        httpx.MockTransport(handler), api_key="super-secret-key"
+    )
+
+    with caplog.at_level("WARNING"), pytest.raises(
+        ProviderError, match="MODEL_NETWORK_ERROR"
+    ):
+        client.generate_structured(
+            messages=[{"role": "user", "content": "Question"}],
+            format_name="test_output",
+            schema={"type": "object"},
+        )
+
+    assert "Azure Responses network error" in caplog.text
+    assert "error_type=ReadTimeout" in caplog.text
+    assert "duration_seconds=" in caplog.text
+    assert "super-secret-key" not in caplog.text
 
 
 def test_concatenates_ordered_output_text_and_ignores_other_output():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -39,11 +40,15 @@ class AzureResponsesClient:
         model: str,
         api_key: str,
         timeout_seconds: float = 60,
+        reasoning_effort: str | None = None,
+        max_output_tokens: int | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
+        self.reasoning_effort = reasoning_effort
+        self.max_output_tokens = max_output_tokens
         self.client = client or httpx.Client(timeout=timeout_seconds)
 
     def generate_structured(
@@ -53,31 +58,56 @@ class AzureResponsesClient:
         format_name: str,
         schema: dict[str, Any],
     ) -> str:
+        started_at = time.perf_counter()
         try:
+            body: dict[str, Any] = {
+                "model": self.model,
+                "input": messages,
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": format_name,
+                        "strict": True,
+                        "schema": schema,
+                    }
+                },
+                "store": False,
+            }
+            if self.reasoning_effort is not None:
+                body["reasoning"] = {"effort": self.reasoning_effort}
+            if self.max_output_tokens is not None:
+                body["max_output_tokens"] = self.max_output_tokens
             response = self.client.post(
                 f"{self.base_url}/responses",
                 headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model,
-                    "input": messages,
-                    "text": {
-                        "format": {
-                            "type": "json_schema",
-                            "name": format_name,
-                            "strict": True,
-                            "schema": schema,
-                        }
-                    },
-                    "store": False,
-                },
+                json=body,
             )
             response.raise_for_status()
-            return self._output_text(response.json())
+            payload = response.json()
+            self._log_success(
+                response,
+                payload,
+                format_name=format_name,
+                duration_seconds=time.perf_counter() - started_at,
+            )
+            return self._output_text(payload)
         except ProviderError:
             raise
         except httpx.HTTPStatusError as error:
-            self._raise_http_error(error)
+            self._raise_http_error(
+                error,
+                format_name=format_name,
+                duration_seconds=time.perf_counter() - started_at,
+            )
         except httpx.HTTPError as error:
+            logger.warning(
+                "Azure Responses network error model=%s format=%s "
+                "duration_seconds=%.2f error_type=%s",
+                self.model,
+                format_name,
+                time.perf_counter() - started_at,
+                type(error).__name__,
+            )
             raise ProviderError(
                 ProviderErrorKind.RETRYABLE, "MODEL_NETWORK_ERROR"
             ) from error
@@ -116,12 +146,58 @@ class AzureResponsesClient:
             )
         return "".join(parts)
 
-    def _raise_http_error(self, error: httpx.HTTPStatusError) -> None:
+    @staticmethod
+    def _request_id(
+        response: httpx.Response, payload: dict[str, Any] | None = None
+    ) -> str:
+        return (
+            response.headers.get("x-request-id")
+            or response.headers.get("apim-request-id")
+            or str((payload or {}).get("id") or "unknown")
+        )
+
+    def _log_success(
+        self,
+        response: httpx.Response,
+        payload: dict[str, Any],
+        *,
+        format_name: str,
+        duration_seconds: float,
+    ) -> None:
+        usage = payload.get("usage") or {}
+        output_details = usage.get("output_tokens_details") or {}
+        logger.info(
+            "Azure Responses request completed model=%s format=%s "
+            "duration_seconds=%.2f status=%s request_id=%s "
+            "input_tokens=%s output_tokens=%s reasoning_tokens=%s "
+            "total_tokens=%s",
+            self.model,
+            format_name,
+            duration_seconds,
+            payload.get("status", "unknown"),
+            self._request_id(response, payload),
+            usage.get("input_tokens", "unknown"),
+            usage.get("output_tokens", "unknown"),
+            output_details.get("reasoning_tokens", "unknown"),
+            usage.get("total_tokens", "unknown"),
+        )
+
+    def _raise_http_error(
+        self,
+        error: httpx.HTTPStatusError,
+        *,
+        format_name: str,
+        duration_seconds: float,
+    ) -> None:
         response = error.response
         logger.warning(
-            "Azure Responses HTTP error status=%s model=%s response=%s",
+            "Azure Responses HTTP error status=%s model=%s format=%s "
+            "duration_seconds=%.2f request_id=%s response=%s",
             response.status_code,
             self.model,
+            format_name,
+            duration_seconds,
+            self._request_id(response),
             _response_excerpt(response),
         )
         if _is_content_filter_response(response):

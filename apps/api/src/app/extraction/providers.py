@@ -100,6 +100,8 @@ class ProviderRegistry:
                 model=profile.model,
                 api_key=self.secret_for(profile) or "",
                 timeout_seconds=profile.timeout_seconds,
+                reasoning_effort=profile.reasoning_effort,
+                max_output_tokens=profile.max_output_tokens,
             )
         if profile.provider == "ollama":
             from app.extraction.ollama import OllamaProvider
@@ -131,6 +133,8 @@ class ProviderRegistry:
                 model=profile.model,
                 api_key=self.secret_for(profile) or "",
                 timeout_seconds=profile.timeout_seconds,
+                reasoning_effort=profile.reasoning_effort,
+                max_output_tokens=profile.max_output_tokens,
             )
         raise ProviderError(
             ProviderErrorKind.CONFIGURATION, "QA_MODEL_PROFILE_UNSUPPORTED"

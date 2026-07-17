@@ -21,6 +21,8 @@ class AzureOpenAIResponsesProvider:
         model: str,
         api_key: str,
         timeout_seconds: float = 60,
+        reasoning_effort: str | None = None,
+        max_output_tokens: int | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         self.responses = AzureResponsesClient(
@@ -28,6 +30,8 @@ class AzureOpenAIResponsesProvider:
             model=model,
             api_key=api_key,
             timeout_seconds=timeout_seconds,
+            reasoning_effort=reasoning_effort,
+            max_output_tokens=max_output_tokens,
             client=client,
         )
 

@@ -83,6 +83,8 @@ AUTH_COOKIE_SECURE=false
 | `api_key_env` | `AZURE_OPENAI_API_KEY` | API 用它判断 profile 是否可用；Worker 用它读取密钥并调用模型 |
 | `api_version` | `2024-06-01` | Azure OpenAI API version |
 | `timeout_seconds` | `60` | 单次模型请求超时 |
+| `reasoning_effort` | 省略 | Responses API 推理强度；`gpt-5.6-sol` 建议设为 `low` |
+| `max_output_tokens` | 省略 | Responses API 最大输出 Token；必须为正整数 |
 
 注意：
 
@@ -95,13 +97,15 @@ Azure AI Foundry 中以 `/openai/v1/responses` 结尾的部署使用新的 Respo
 
 ```dotenv
 AZURE_OPENAI_API_KEY=replace-with-your-azure-openai-key
-MODEL_PROFILES_JSON=[{"id":"fixed:test","provider":"fixed","base_url":"","model":"deterministic-test","api_key_env":"","timeout_seconds":10},{"id":"azure:gpt-5.6-sol","provider":"azure-openai-responses","base_url":"https://dxp-5099-resource.services.ai.azure.com/openai/v1","model":"gpt-5.6-sol","api_key_env":"AZURE_OPENAI_API_KEY","timeout_seconds":180}]
+MODEL_PROFILES_JSON=[{"id":"fixed:test","provider":"fixed","base_url":"","model":"deterministic-test","api_key_env":"","timeout_seconds":10},{"id":"azure:gpt-5.6-sol","provider":"azure-openai-responses","base_url":"https://dxp-5099-resource.services.ai.azure.com/openai/v1","model":"gpt-5.6-sol","api_key_env":"AZURE_OPENAI_API_KEY","timeout_seconds":180,"reasoning_effort":"low","max_output_tokens":12000}]
 QA_MODEL_PROFILE_ID=azure:gpt-5.6-sol
 ```
 
 - Azure 门户显示的完整 Endpoint 可能以 `/openai/v1/responses` 结尾；`base_url` 只填写到 `/openai/v1`。
 - `model` 必须填写 Deployment info 中的 Name。
 - `azure-openai-responses` 不填写 `api_version`，不会调用旧的 deployment-scoped Chat Completions URL。
+- `reasoning_effort=low` 与服务器实测的 5–16 秒单片段调用一致，可避免模型默认投入过多推理 Token。
+- `max_output_tokens=12000` 为结构化抽取设置明确上限；可以按模型输出完整性继续调节。
 - `QA_MODEL_PROFILE_ID` 指向该 profile 后，同一个 deployment 也用于问答意图解析。
 - 原有 `azure-openai` profile 仍用于 `/chat/completions`，两种 profile 可以同时存在。
 

@@ -237,7 +237,7 @@ def test_pipeline_stops_before_import_when_cancelled_after_a_chunk(
     assert writer.rows == {"Entity": [], "Fact": [], "Evidence": []}
 
 
-def test_pipeline_retries_retryable_provider_errors():
+def test_pipeline_retries_retryable_provider_errors(caplog):
     result = ExtractionResult.model_validate({
         "entities": [
             {"local_id": "a", "name": "甲", "type": "Person"},
@@ -267,12 +267,45 @@ def test_pipeline_retries_retryable_provider_errors():
     provider = FlakyProvider()
     writer = MemoryWriter()
     pipeline = ExtractionPipeline(GraphImporter(writer), retry_sleep=sleeps.append)
-    output = pipeline.process("p-1", "测试", "第一章 开端\n甲识乙", provider)
+    with caplog.at_level("WARNING"):
+        output = pipeline.process("p-1", "测试", "第一章 开端\n甲识乙", provider)
 
     assert provider.calls == 2
     assert sleeps == [1.2]
     assert output.quality.retry_count == 1
     assert output.quality.successful_chunks == 1
+    assert "Extraction request retry scheduled" in caplog.text
+    assert "chunk_id=chapter-1-chunk-1" in caplog.text
+    assert "code=MODEL_HTTP_429" in caplog.text
+    assert "retry=1/3" in caplog.text
+    assert "delay_seconds=1.20" in caplog.text
+
+
+def test_pipeline_logs_when_retry_budget_is_exhausted(caplog):
+    class BrokenProvider:
+        def extract(self, request):
+            raise ProviderError(
+                ProviderErrorKind.RETRYABLE,
+                "MODEL_NETWORK_ERROR",
+            )
+
+    pipeline = ExtractionPipeline(
+        GraphImporter(MemoryWriter()),
+        max_retries=1,
+        retry_sleep=lambda _: None,
+    )
+
+    with caplog.at_level("WARNING"), pytest.raises(
+        ProviderError, match="MODEL_NETWORK_ERROR"
+    ):
+        pipeline.process(
+            "p-1", "测试", "第一章 开端\n甲识乙", BrokenProvider()
+        )
+
+    assert "Extraction request retry exhausted" in caplog.text
+    assert "chunk_id=chapter-1-chunk-1" in caplog.text
+    assert "code=MODEL_NETWORK_ERROR" in caplog.text
+    assert "retries=1" in caplog.text
 
 
 def test_attribute_only_pipeline_imports_only_attribute_evidence():

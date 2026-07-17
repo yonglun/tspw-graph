@@ -5,6 +5,7 @@ x-app-env: &app-env
   NEO4J_USER: neo4j
   NEO4J_PASSWORD: ${NEO4J_PASSWORD:-development-only}
   MODEL_PROFILES_JSON: '${MODEL_PROFILES_JSON:-[{"id":"fixed:test","provider":"fixed","base_url":"","model":"deterministic-test","api_key_env":"","timeout_seconds":10}]}'
+  EXTRACTION_CONCURRENCY: ${EXTRACTION_CONCURRENCY:-1}
   QA_MODEL_PROFILE_ID: ${QA_MODEL_PROFILE_ID:-azure:gpt-4o-mini}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}

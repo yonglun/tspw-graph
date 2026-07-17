@@ -25,6 +25,12 @@ docker compose down
 
 完整 Docker 部署和 Azure OpenAI 配置见 [Docker 部署手册](docs/deployment-docker-azure-openai.md)。
 
+## 设计与实现文档
+
+- [系统架构设计](docs/system-architecture-design.md)
+- [数据库设计](docs/database-design.md)
+- [信息抽取与图谱构建完整过程](docs/information-extraction-and-graph-construction.md)
+
 ## 本地进程运行
 
 ```bash

@@ -6,7 +6,7 @@
 
 适用版本：当前 `master`（基线提交 `1b7ddc0`）
 
-相关文档：[系统架构设计](system-architecture-design.md)
+相关文档：[系统架构设计](system-architecture-design.md) · [信息抽取与图谱构建完整过程](information-extraction-and-graph-construction.md)
 
 ## 1. 文档目标与适用范围
 

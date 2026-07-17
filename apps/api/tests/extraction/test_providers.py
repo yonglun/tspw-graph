@@ -3,10 +3,12 @@ import pytest
 from app.extraction.fixed import FixedProvider
 from app.extraction.models import ExtractionRequest
 from app.extraction.azure_openai import AzureOpenAIProvider
+from app.extraction.azure_responses import AzureOpenAIResponsesProvider
 from app.extraction.ollama import OllamaProvider
 from app.extraction.openai_compatible import OpenAICompatibleProvider
 from app.extraction.providers import ProviderError, ProviderRegistry
 from app.settings import ModelProfileSettings, Settings
+from app.qa.llm import QaResponsesIntentProvider
 
 
 def settings_with(profile: ModelProfileSettings) -> Settings:
@@ -27,6 +29,13 @@ def test_registry_builds_all_supported_providers(monkeypatch):
             model="deployment", api_key_env="TEST_MODEL_KEY", api_version="2024-06-01"
         ))
     ).create("azure:test")
+    responses = ProviderRegistry(
+        settings_with(ModelProfileSettings(
+            id="azure:responses", provider="azure-openai-responses",
+            base_url="https://resource.services.ai.azure.com/openai/v1",
+            model="gpt-5.6-sol", api_key_env="TEST_MODEL_KEY"
+        ))
+    ).create("azure:responses")
     ollama = ProviderRegistry(
         settings_with(ModelProfileSettings(
             id="ollama:test", provider="ollama", base_url="http://fake", model="qwen3"
@@ -37,6 +46,7 @@ def test_registry_builds_all_supported_providers(monkeypatch):
     ).create("fixed:test")
     assert isinstance(openai, OpenAICompatibleProvider)
     assert isinstance(azure, AzureOpenAIProvider)
+    assert isinstance(responses, AzureOpenAIResponsesProvider)
     assert isinstance(ollama, OllamaProvider)
     assert isinstance(fixed, FixedProvider)
 
@@ -49,6 +59,25 @@ def test_registry_rejects_missing_secret(monkeypatch):
     )))
     with pytest.raises(ProviderError, match="MODEL_API_KEY_MISSING"):
         registry.create("openai:test")
+
+
+def test_registry_builds_responses_qa_provider(monkeypatch):
+    monkeypatch.setenv("TEST_MODEL_KEY", "secret")
+    registry = ProviderRegistry(
+        settings_with(
+            ModelProfileSettings(
+                id="azure:responses",
+                provider="azure-openai-responses",
+                base_url="https://resource.services.ai.azure.com/openai/v1",
+                model="gpt-5.6-sol",
+                api_key_env="TEST_MODEL_KEY",
+            )
+        )
+    )
+
+    result = registry.create_qa_intent("azure:responses")
+
+    assert isinstance(result, QaResponsesIntentProvider)
 
 
 def test_fixed_provider_extracts_deterministic_e2e_fixture():

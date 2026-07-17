@@ -3,6 +3,7 @@ import json
 import httpx
 import pytest
 
+import app.qa.llm as qa_llm
 from app.ontology.catalog import CATALOG
 from app.qa.intents import QaIntent
 from app.qa.llm import QaIntentProvider
@@ -32,6 +33,27 @@ def provider(client):
         api_key="secret",
         client=client,
     )
+
+
+def responses_provider(client):
+    return qa_llm.QaResponsesIntentProvider(
+        base_url="https://resource.services.ai.azure.com/openai/v1",
+        model="gpt-5.6-sol",
+        api_key="secret",
+        client=client,
+    )
+
+
+def responses_payload(content: str) -> dict:
+    return {
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "content": [{"type": "output_text", "text": content}],
+            }
+        ],
+    }
 
 
 def test_parses_strict_intent_and_sends_allowlist():
@@ -85,3 +107,43 @@ def test_maps_http_and_json_failures_to_provider_errors():
     assert error.value.kind.value == "RETRYABLE"
     with pytest.raises(ProviderError, match="MODEL_RESPONSE_INVALID"):
         provider(malformed).parse("问题", CATALOG)
+
+
+def test_responses_provider_parses_intent_and_uses_native_schema():
+    content = json.dumps(
+        {
+            "intent": "ATTRIBUTE",
+            "subject": "令狐冲",
+            "relation": None,
+            "property": "gender",
+            "confidence": 0.95,
+        },
+        ensure_ascii=False,
+    )
+    client = FakeClient(responses_payload(content))
+
+    intent = responses_provider(client).parse("令狐冲的性别是什么？", CATALOG)
+
+    assert intent.property == "gender"
+    url, request = client.requests[0]
+    assert url.endswith("/openai/v1/responses")
+    assert request["headers"]["Authorization"] == "Bearer secret"
+    assert request["json"]["text"]["format"]["name"] == "qa_intent"
+    assert "gender" in request["json"]["input"][0]["content"]
+
+
+def test_responses_provider_preserves_low_confidence_validation():
+    content = json.dumps(
+        {
+            "intent": "ATTRIBUTE",
+            "subject": "令狐冲",
+            "relation": None,
+            "property": "gender",
+            "confidence": 0.2,
+        },
+        ensure_ascii=False,
+    )
+    client = FakeClient(responses_payload(content))
+
+    with pytest.raises(ProviderError, match="QA_INTENT_LOW_CONFIDENCE"):
+        responses_provider(client).parse("令狐冲的性别是什么？", CATALOG)

@@ -6,6 +6,7 @@ import pytest
 from app.extraction.fixed import FixedProvider
 from app.extraction.models import ExtractionRequest
 from app.extraction.azure_openai import AzureOpenAIProvider
+from app.extraction.azure_responses import AzureOpenAIResponsesProvider
 from app.extraction.ollama import OllamaProvider
 from app.extraction.openai_compatible import OpenAICompatibleProvider
 from app.extraction.providers import ProviderError, ProviderErrorKind
@@ -124,6 +125,39 @@ def test_azure_openai_provider_uses_deployment_api_version_and_api_key_header():
     assert "authorization" not in sent.headers
     assert body["response_format"]["type"] == "json_schema"
     assert_strict_schema(body["response_format"]["json_schema"]["schema"])
+    assert result.entities[0].name == "令狐冲"
+
+
+def test_azure_responses_provider_uses_extraction_schema_and_parses_output():
+    captured = {}
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        captured["request"] = http_request
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": FIXED}],
+                    }
+                ],
+            },
+        )
+
+    result = AzureOpenAIResponsesProvider(
+        base_url="https://resource.services.ai.azure.com/openai/v1",
+        model="gpt-5.6-sol",
+        api_key="azure-secret",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    ).extract(request())
+
+    sent = captured["request"]
+    body = json.loads(sent.content)
+    assert body["text"]["format"]["name"] == "knowledge_graph_extraction"
+    assert_strict_schema(body["text"]["format"]["schema"])
+    assert "令狐冲" in body["input"][1]["content"]
     assert result.entities[0].name == "令狐冲"
 
 

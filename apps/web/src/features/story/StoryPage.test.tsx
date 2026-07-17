@@ -7,6 +7,8 @@ import { StoryPage } from './StoryPage'
 
 const people = [
   { id: 'linghu', project_id: 'xiaoao', type: 'Person', name: '令狐沖', aliases: ['令狐冲'], description: '' },
+  { id: 'feng', project_id: 'xiaoao', type: 'Person', name: '风清扬', aliases: [], description: '' },
+  { id: 'ren', project_id: 'xiaoao', type: 'Person', name: '任我行', aliases: [], description: '' },
 ]
 
 const events = [
@@ -30,7 +32,7 @@ function mockFetch(options: { failDetailOnce?: boolean } = {}) {
   let detailCalls = 0
   const fetchMock = vi.fn(async (input: string | URL | Request) => {
     const url = String(input)
-    if (url.includes('/search')) return new Response(JSON.stringify(people))
+    if (url.includes('/timeline/participants')) return new Response(JSON.stringify(people))
     if (url.includes('/timeline/')) {
       detailCalls += 1
       if (options.failDetailOnce && detailCalls === 1) return new Response(JSON.stringify({ detail: { code: 'GRAPH_UNAVAILABLE' } }), { status: 503 })
@@ -61,6 +63,21 @@ describe('StoryPage', () => {
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+  })
+
+  it('lists all people connected to timeline events instead of a hard-coded name search', async () => {
+    const fetchMock = mockFetch()
+    renderStory()
+
+    const select = await screen.findByRole('combobox', { name: '人物' })
+    expect(select).toHaveTextContent('令狐沖')
+    expect(select).toHaveTextContent('风清扬')
+    expect(select).toHaveTextContent('任我行')
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/graph/timeline/participants?project_id=xiaoao',
+      expect.anything(),
+    )
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/graph/search'))).toBe(false)
   })
 
   it('expands an event with participants, temporal relationship groups, and evidence', async () => {

@@ -258,6 +258,23 @@ def timeline_entity(entity_id: str, entity_type: str, name: str) -> dict:
     }
 
 
+def test_timeline_participants_filters_project_type_and_duplicates() -> None:
+    class Repository:
+        def timeline_participants(self, project_id: str, limit: int):
+            linghu = timeline_entity("linghu", "Person", "令狐冲")
+            return [
+                linghu,
+                linghu,
+                timeline_entity("feng", "Person", "风清扬"),
+                {**timeline_entity("other", "Person", "外部人物"), "project_id": "p-2"},
+                timeline_entity("event", "Event", "非人物"),
+            ]
+
+    results = GraphService(Repository()).timeline_participants("p-1", 100)
+
+    assert [item.id for item in results] == ["linghu", "feng"]
+
+
 class TimelineDetailRepository:
     def timeline_detail(self, project_id: str, event_id: str):
         person = timeline_entity("linghu", "Person", "令狐冲")
@@ -387,6 +404,20 @@ def test_exact_search_uses_composite_index_compatible_equalities() -> None:
 
     assert "n.project_id = $project_id AND n.name = $search_text" in session.statement
     assert "CONTAINS" not in session.statement
+
+
+def test_timeline_participants_query_uses_event_relationships_and_person_type() -> None:
+    session = FakeSession()
+    repository = Neo4jGraphRepository(FakeDriver(session))
+
+    result = repository.timeline_participants("p-1", 100)
+
+    assert result == []
+    assert "event.type IN ['Event', 'TeachingEvent']" in session.statement
+    assert "person.type = 'Person'" in session.statement
+    assert "[event_edge:RELATED]" in session.statement
+    assert "coalesce(event_edge.review_status, 'ACCEPTED') <> 'REJECTED'" in session.statement
+    assert session.parameters == {"project_id": "p-1", "limit": 100}
 
 
 def test_one_hop_query_returns_center_without_edges_and_matches_related_directly() -> None:

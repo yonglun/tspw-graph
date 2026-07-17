@@ -98,6 +98,19 @@ def timeline(
 
 
 @router.get(
+    "/api/graph/timeline/participants", response_model=list[EntitySummary]
+)
+def timeline_participants(
+    repository: Repository,
+    project_id: str,
+    limit: int = Query(default=500, ge=1, le=1000),
+) -> list[EntitySummary]:
+    return execute(
+        lambda: GraphService(repository).timeline_participants(project_id, limit)
+    )
+
+
+@router.get(
     "/api/graph/timeline/{event_id}", response_model=TimelineEventDetail
 )
 def timeline_detail(

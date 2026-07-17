@@ -235,6 +235,18 @@ class GraphService:
             )
         ]
 
+    def timeline_participants(
+        self, project_id: str, limit: int
+    ) -> list[EntitySummary]:
+        rows = self._project_rows(
+            self.repository.timeline_participants(project_id, limit), project_id
+        )
+        people = [row for row in rows if row.get("type") == "Person"]
+        return [
+            EntitySummary.model_validate(row)
+            for row in self._deduplicate(people)[:limit]
+        ]
+
     def timeline_detail(
         self, project_id: str, event_id: str
     ) -> TimelineEventDetail:

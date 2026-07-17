@@ -233,6 +233,13 @@ export function getTimelineDetail(projectId: string, eventId: string, signal?: A
   )
 }
 
+export function getTimelineParticipants(projectId: string, signal?: AbortSignal) {
+  return apiFetch<EntitySummary[]>(
+    `/api/graph/timeline/participants?project_id=${encodeURIComponent(projectId)}`,
+    { signal },
+  )
+}
+
 export function getQaSuggestions(projectId: string, signal?: AbortSignal) {
   return apiFetch<QaSuggestionsResponse>(
     `/api/projects/${encodeURIComponent(projectId)}/qa-suggestions`,

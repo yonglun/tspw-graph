@@ -27,7 +27,7 @@
 - Modify: `compose.yaml`
 - Modify: `.env.example`
 
-- [ ] Add failing settings tests for the default, an explicit value, and invalid bounds.
+- [x] Add failing settings tests for the default, an explicit value, and invalid bounds.
 
 ```python
 def test_extraction_concurrency_defaults_to_one(monkeypatch):
@@ -47,33 +47,33 @@ def test_extraction_concurrency_rejects_out_of_range(monkeypatch, value):
         Settings(_env_file=None)
 ```
 
-- [ ] Run the focused tests and confirm they fail because the field does not exist.
+- [x] Run the focused tests and confirm they fail because the field does not exist.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests/test_settings_model_profiles.py
 ```
 
-- [ ] Add the validated setting in `Settings`.
+- [x] Add the validated setting in `Settings`.
 
 ```python
 extraction_concurrency: int = Field(default=1, ge=1, le=16)
 ```
 
-- [ ] Pass the setting into the shared API/worker Compose environment.
+- [x] Pass the setting into the shared API/worker Compose environment.
 
 ```yaml
 EXTRACTION_CONCURRENCY: ${EXTRACTION_CONCURRENCY:-1}
 ```
 
-- [ ] Add `EXTRACTION_CONCURRENCY=1` to `.env.example` with a short comment recommending `4` as the first production tuning value.
-- [ ] Run the focused tests and validate the rendered Compose configuration.
+- [x] Add `EXTRACTION_CONCURRENCY=1` to `.env.example` with a short comment recommending `4` as the first production tuning value.
+- [x] Run the focused tests and validate the rendered Compose configuration.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests/test_settings_model_profiles.py
 docker compose config >/dev/null
 ```
 
-- [ ] Commit this independently reviewable change.
+- [x] Commit this independently reviewable change.
 
 ```bash
 git add apps/api/src/app/settings.py apps/api/tests/test_settings_model_profiles.py compose.yaml .env.example
@@ -88,17 +88,17 @@ git commit -m "feat: configure extraction request concurrency"
 - Modify: `apps/api/src/app/worker/main.py`
 - Modify: `apps/api/tests/extraction/test_pipeline.py`
 
-- [ ] Add test helpers that can return named `TextChunk` instances and providers that record active-call count under a `Lock`.
-- [ ] Add a failing test with four chunks and a `Barrier(4)` proving `concurrency=4` reaches four simultaneous provider calls without exceeding four.
-- [ ] Add a failing test proving `concurrency=1` retains the current serial behavior.
-- [ ] Add a failing deterministic-order test: deliberately complete chunks in reverse order, then assert imported/merged entities remain in source order (`甲`, `乙`, `丙`).
-- [ ] Run the focused tests and confirm the expected failures.
+- [x] Add test helpers that can return named `TextChunk` instances and providers that record active-call count under a `Lock`.
+- [x] Add a failing test with four chunks and a `Barrier(4)` proving `concurrency=4` reaches four simultaneous provider calls without exceeding four.
+- [x] Add a failing test proving `concurrency=1` retains the current serial behavior.
+- [x] Add a failing deterministic-order test: deliberately complete chunks in reverse order, then assert imported/merged entities remain in source order (`甲`, `乙`, `丙`).
+- [x] Run the focused tests and confirm the expected failures.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests/extraction/test_pipeline.py -k 'concurrency or source_order'
 ```
 
-- [ ] Add a private outcome value that carries source index, chunk, result, retry count, and optional skip code.
+- [x] Add a private outcome value that carries source index, chunk, result, retry count, and optional skip code.
 
 ```python
 @dataclass(frozen=True)
@@ -110,15 +110,15 @@ class ChunkExtractionOutcome:
     error_code: str | None = None
 ```
 
-- [ ] Extend `ExtractionPipeline.__init__` with `concurrency: int = 1` and reject values outside `1–16` defensively.
-- [ ] Extract one chunk in `_extract_chunk`; keep `_extract_with_retries` unchanged and convert only `MODEL_CONTENT_FILTER` into a skipped outcome. Let other provider errors propagate.
-- [ ] Implement `_extract_chunks` with `ThreadPoolExecutor`, a `future -> (index, chunk)` map, and a sliding window no larger than `self.concurrency`.
-- [ ] Use `wait(..., return_when=FIRST_COMPLETED)` so each completion advances persisted progress and opens one new submission slot.
-- [ ] Check cancellation before initial submission, before every refill, and after each completed future. On abort, cancel pending futures and call `shutdown(wait=True, cancel_futures=True)`.
-- [ ] Sort successful/skipped outcomes by source index before the existing normalization and merge logic runs.
-- [ ] Keep progress counting based on completed provider calls, while preserving the visible “current chunk / total chunks” contract.
-- [ ] Keep the final cancellation check immediately before the single Neo4j import.
-- [ ] Wire the setting into the worker composition root.
+- [x] Extend `ExtractionPipeline.__init__` with `concurrency: int = 1` and reject values outside `1–16` defensively.
+- [x] Extract one chunk in `_extract_chunk`; keep `_extract_with_retries` unchanged and convert only `MODEL_CONTENT_FILTER` into a skipped outcome. Let other provider errors propagate.
+- [x] Implement `_extract_chunks` with `ThreadPoolExecutor`, a `future -> (index, chunk)` map, and a sliding window no larger than `self.concurrency`.
+- [x] Use `wait(..., return_when=FIRST_COMPLETED)` so each completion advances persisted progress and opens one new submission slot.
+- [x] Check cancellation before initial submission, before every refill, and after each completed future. On abort, cancel pending futures and call `shutdown(wait=True, cancel_futures=True)`.
+- [x] Sort successful/skipped outcomes by source index before the existing normalization and merge logic runs.
+- [x] Keep progress counting based on completed provider calls, while preserving the visible “current chunk / total chunks” contract.
+- [x] Keep the final cancellation check immediately before the single Neo4j import.
+- [x] Wire the setting into the worker composition root.
 
 ```python
 pipeline = ExtractionPipeline(
@@ -127,13 +127,13 @@ pipeline = ExtractionPipeline(
 )
 ```
 
-- [ ] Run all extraction pipeline tests.
+- [x] Run all extraction pipeline tests.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests/extraction/test_pipeline.py
 ```
 
-- [ ] Commit the bounded-success-path implementation.
+- [x] Commit the bounded-success-path implementation.
 
 ```bash
 git add apps/api/src/app/extraction/pipeline.py apps/api/src/app/worker/main.py apps/api/tests/extraction/test_pipeline.py
@@ -147,22 +147,22 @@ git commit -m "perf: run extraction requests with bounded concurrency"
 - Modify: `apps/api/src/app/extraction/pipeline.py`
 - Modify: `apps/api/tests/extraction/test_pipeline.py`
 
-- [ ] Add a retry-isolation test: one chunk fails transiently and sleeps before retry, while another chunk completes during that backoff. Assert the second chunk is not blocked by the first chunk's retry delay.
-- [ ] Add a cancellation test with four chunks and `concurrency=2`: let exactly two calls enter through `Barrier(2)`, trigger cancellation, and assert no third call starts, no entities/facts are written, and the importer is never called.
-- [ ] Add a fatal-error test with `坏`, `在途`, and `未提交`: run the first two concurrently, make `坏` raise `INVALID_RESPONSE`, allow `在途` to finish, and assert `未提交` never starts and no import occurs.
-- [ ] Assert fatal logs include the exact failing chunk ID and provider error code, but never source text, prompts, or credentials.
-- [ ] Run these new tests and confirm they fail before the safety implementation.
+- [x] Add a retry-isolation test: one chunk fails transiently and sleeps before retry, while another chunk completes during that backoff. Assert the second chunk is not blocked by the first chunk's retry delay.
+- [x] Add a cancellation test with four chunks and `concurrency=2`: let exactly two calls enter through `Barrier(2)`, trigger cancellation, and assert no third call starts, no entities/facts are written, and the importer is never called.
+- [x] Add a fatal-error test with `坏`, `在途`, and `未提交`: run the first two concurrently, make `坏` raise `INVALID_RESPONSE`, allow `在途` to finish, and assert `未提交` never starts and no import occurs.
+- [x] Assert fatal logs include the exact failing chunk ID and provider error code, but never source text, prompts, or credentials.
+- [x] Run these new tests and confirm they fail before the safety implementation.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests/extraction/test_pipeline.py -k 'retry_isolation or concurrent_cancel or concurrent_fatal'
 ```
 
-- [ ] Keep the future-to-chunk mapping available until `future.result()` succeeds or raises so failure logs identify the correct chunk.
-- [ ] On the first fatal exception, stop refilling the window, cancel all not-yet-running futures, wait for running futures, discard every result, and re-raise the original provider error.
-- [ ] On cancellation, use the same drain path but raise the existing cancellation signal rather than a provider error.
-- [ ] Emit one structured batch-start log, one cancellation/fatal summary, and retain the existing per-request timing logs. Do not log full request or response bodies.
-- [ ] Confirm content-filter handling remains a per-chunk skip and does not abort other chunks.
-- [ ] Run the safety tests repeatedly to catch race-sensitive failures.
+- [x] Keep the future-to-chunk mapping available until `future.result()` succeeds or raises so failure logs identify the correct chunk.
+- [x] On the first fatal exception, stop refilling the window, cancel all not-yet-running futures, wait for running futures, discard every result, and re-raise the original provider error.
+- [x] On cancellation, use the same drain path but raise the existing cancellation signal rather than a provider error.
+- [x] Emit one structured batch-start log, one cancellation/fatal summary, and retain the existing per-request timing logs. Do not log full request or response bodies.
+- [x] Confirm content-filter handling remains a per-chunk skip and does not abort other chunks.
+- [x] Run the safety tests repeatedly to catch race-sensitive failures.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests/extraction/test_pipeline.py -k 'retry_isolation or concurrent_cancel or concurrent_fatal'
@@ -172,7 +172,7 @@ git commit -m "perf: run extraction requests with bounded concurrency"
 .venv/bin/python -m pytest -q apps/api/tests/extraction/test_pipeline.py -k 'retry_isolation or concurrent_cancel or concurrent_fatal'
 ```
 
-- [ ] Run the complete pipeline suite and commit.
+- [x] Run the complete pipeline suite and commit.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests/extraction/test_pipeline.py
@@ -188,15 +188,15 @@ git commit -m "fix: make concurrent extraction cancellation safe"
 - Modify: `docs/deployment-docker-azure-openai.md`
 - Verify: `apps/api/src/app/worker/online.py`
 
-- [ ] Add an attribute-only pipeline test using two source chunks and `Barrier(2)`, asserting configured concurrency is used and only attribute data—not entities or relationships—is imported.
-- [ ] Confirm both full-build and attribute-backfill handlers in `worker/online.py` use the same configured pipeline instance; do not duplicate executor logic in job handlers.
-- [ ] Run the attribute and full-build tests.
+- [x] Add an attribute-only pipeline test using two source chunks and `Barrier(2)`, asserting configured concurrency is used and only attribute data—not entities or relationships—is imported.
+- [x] Confirm both full-build and attribute-backfill handlers in `worker/online.py` use the same configured pipeline instance; do not duplicate executor logic in job handlers.
+- [x] Run the attribute and full-build tests.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests/extraction/test_pipeline.py -k 'attribute or concurrency'
 ```
 
-- [ ] Document server configuration and rollout.
+- [x] Document server configuration and rollout.
 
 ```dotenv
 EXTRACTION_CONCURRENCY=4
@@ -209,14 +209,14 @@ sudo docker compose exec worker printenv EXTRACTION_CONCURRENCY
 sudo docker compose logs -f worker
 ```
 
-- [ ] Document that `1` restores serial execution, `2` is the conservative fallback, cancellation cannot interrupt an already-running synchronous HTTP call, and higher concurrency consumes RPM/TPM quota faster.
-- [ ] Run the API suite, excluding the repository's opt-in live Neo4j test.
+- [x] Document that `1` restores serial execution, `2` is the conservative fallback, cancellation cannot interrupt an already-running synchronous HTTP call, and higher concurrency consumes RPM/TPM quota faster.
+- [x] Run the API suite, excluding the repository's opt-in live Neo4j test.
 
 ```bash
 .venv/bin/python -m pytest -q apps/api/tests -k 'not test_review_scan_and_items_endpoint'
 ```
 
-- [ ] Run syntax, Compose, and patch hygiene checks.
+- [x] Run syntax, Compose, and patch hygiene checks.
 
 ```bash
 .venv/bin/python -m compileall -q apps/api/src
@@ -225,7 +225,7 @@ git diff --check
 git status --short
 ```
 
-- [ ] Review the final diff for the following invariants:
+- [x] Review the final diff for the following invariants:
 
   - No secrets, source text, prompt bodies, or full model responses are logged.
   - Provider public interfaces and extraction schemas remain backward compatible.
@@ -234,7 +234,7 @@ git status --short
   - Default concurrency remains `1`.
   - Full builds and attribute backfills both honor the same setting.
 
-- [ ] Commit documentation and final coverage.
+- [x] Commit documentation and final coverage.
 
 ```bash
 git add apps/api/tests/extraction/test_pipeline.py docs/deployment-docker-azure-openai.md
@@ -243,10 +243,10 @@ git commit -m "docs: document concurrent extraction rollout"
 
 ## Completion Criteria
 
-- [ ] `EXTRACTION_CONCURRENCY=1` is behaviorally equivalent to the current serial implementation.
-- [ ] A configured value of `N` never produces more than `N` simultaneous model requests in one worker process.
-- [ ] Completion order cannot change the graph's deterministic source-order merge.
-- [ ] Retries occupy only their own slot and do not block other active slots.
-- [ ] Cancellation and fatal errors stop new submissions and prevent import.
-- [ ] Progress advances on each completed or deliberately skipped chunk.
-- [ ] Deployment documentation includes validation, observability, tuning, and rollback steps.
+- [x] `EXTRACTION_CONCURRENCY=1` is behaviorally equivalent to the current serial implementation.
+- [x] A configured value of `N` never produces more than `N` simultaneous model requests in one worker process.
+- [x] Completion order cannot change the graph's deterministic source-order merge.
+- [x] Retries occupy only their own slot and do not block other active slots.
+- [x] Cancellation and fatal errors stop new submissions and prevent import.
+- [x] Progress advances on each completed or deliberately skipped chunk.
+- [x] Deployment documentation includes validation, observability, tuning, and rollback steps.

@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+from threading import Barrier, Lock
+import time
 
 import pytest
 
@@ -56,6 +58,101 @@ class CapturingWriter(MemoryWriter):
 class EmptyProvider:
     def extract(self, request):
         return ExtractionResult(entities=[], facts=[])
+
+
+def split_with_chunks(*texts):
+    chunks = []
+    offset = 0
+    for index, text in enumerate(texts, start=1):
+        chunks.append(
+            TextChunk(
+                id=f"c-{index}",
+                chapter_number=1,
+                start_offset=offset,
+                end_offset=offset + len(text),
+                text=text,
+            )
+        )
+        offset += len(text)
+    return SimpleNamespace(chunks=chunks, chapters=[])
+
+
+class ConcurrencyTrackingProvider:
+    def __init__(self, parties=None):
+        self.barrier = Barrier(parties, timeout=2) if parties else None
+        self.lock = Lock()
+        self.active = 0
+        self.peak = 0
+
+    def extract(self, request):
+        with self.lock:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+        try:
+            if self.barrier:
+                self.barrier.wait()
+            return ExtractionResult()
+        finally:
+            with self.lock:
+                self.active -= 1
+
+
+def test_pipeline_limits_parallel_provider_calls(monkeypatch):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("甲", "乙", "丙", "丁"),
+    )
+    provider = ConcurrencyTrackingProvider(parties=4)
+
+    ExtractionPipeline(
+        GraphImporter(MemoryWriter()), concurrency=4
+    ).process("p-1", "测试", "source", provider)
+
+    assert provider.peak == 4
+
+
+def test_pipeline_concurrency_one_remains_serial(monkeypatch):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("甲", "乙", "丙"),
+    )
+    provider = ConcurrencyTrackingProvider()
+
+    ExtractionPipeline(
+        GraphImporter(MemoryWriter()), concurrency=1
+    ).process("p-1", "测试", "source", provider)
+
+    assert provider.peak == 1
+
+
+def test_pipeline_merges_results_in_source_order(monkeypatch):
+    monkeypatch.setattr(
+        "app.extraction.pipeline.split_document",
+        lambda _: split_with_chunks("甲", "乙", "丙"),
+    )
+
+    class ReverseCompletionProvider:
+        def extract(self, request):
+            delay = {"c-1": 0.06, "c-2": 0.03, "c-3": 0.0}[request.chunk_id]
+            time.sleep(delay)
+            return ExtractionResult.model_validate(
+                {
+                    "entities": [
+                        {
+                            "local_id": request.chunk_id,
+                            "name": request.text,
+                            "type": "Person",
+                        }
+                    ]
+                }
+            )
+
+    writer = CapturingWriter()
+    ExtractionPipeline(GraphImporter(writer), concurrency=3).process(
+        "p-1", "测试", "source", ReverseCompletionProvider()
+    )
+
+    assert [row["name"] for row in writer.rows["Entity"]] == ["甲", "乙", "丙"]
 
 
 def test_pipeline_sends_effective_property_definitions_to_provider():

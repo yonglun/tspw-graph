@@ -35,7 +35,10 @@ def main() -> None:
         projects=projects,
         jobs=jobs,
         uploads=uploads,
-        pipeline=ExtractionPipeline(GraphImporter(graph)),
+        pipeline=ExtractionPipeline(
+            GraphImporter(graph),
+            concurrency=settings.extraction_concurrency,
+        ),
         settings=settings,
     ).mapping()
     runner = WorkerRunner(

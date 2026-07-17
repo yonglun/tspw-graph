@@ -206,6 +206,16 @@ class ExtractionPipeline:
                     index, chunk = pending.pop(future)
                     try:
                         outcome = future.result()
+                    except ProviderError as error:
+                        logger.error(
+                            "Extraction batch failed project_id=%s "
+                            "chunk_id=%s code=%s",
+                            project_id,
+                            chunk.id,
+                            error.code,
+                            exc_info=True,
+                        )
+                        raise
                     except Exception:
                         logger.exception(
                             "Extraction batch failed project_id=%s chunk_id=%s",

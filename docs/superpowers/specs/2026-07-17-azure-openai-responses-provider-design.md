@@ -120,7 +120,9 @@ Configuration semantics:
 
 The API may expose profile metadata and availability but must never expose the
 secret value. The Worker and API resolve the secret through `api_key_env` using
-the existing settings mechanism.
+the existing settings mechanism. Docker Compose must also pass
+`QA_MODEL_PROFILE_ID` from the host `.env` into the shared application
+environment so the API selects the configured Responses profile.
 
 ## Request Contract
 
@@ -208,6 +210,9 @@ complete source text.
   endpoint and requires no new component.
 - Existing Docker Compose secret propagation is sufficient because the new
   profile reuses `AZURE_OPENAI_API_KEY`.
+- Docker Compose adds `QA_MODEL_PROFILE_ID` to the shared API/Worker
+  environment so the host `.env` selector is available inside the API
+  container.
 - No database migration is required.
 
 ## Testing
@@ -268,4 +273,3 @@ complete source text.
   <https://learn.microsoft.com/en-us/rest/api/microsoft-foundry/azureopenai/responses>
 - Microsoft, migrate Chat Completions to Responses:
   <https://learn.microsoft.com/en-us/azure/developer/ai/how-to/azure-openai-to-responses>
-

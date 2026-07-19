@@ -137,7 +137,8 @@ it('clears the previous answer when the project changes', async () => {
   await user.click(screen.getByRole('button', { name: '查询图谱' }))
   expect(await screen.findByRole('heading', { name: '令狐沖的性别是男。' })).toBeVisible()
 
-  await user.selectOptions(screen.getByRole('combobox', { name: '当前项目' }), 'project-shujian')
+  await user.click(screen.getByRole('button', { name: '当前项目' }))
+  await user.click(screen.getByRole('option', { name: '书剑恩仇录' }))
 
   expect(screen.queryByRole('heading', { name: '令狐沖的性别是男。' })).not.toBeInTheDocument()
   expect(await screen.findByText('向《书剑恩仇录》图谱提问')).toBeVisible()
@@ -164,8 +165,8 @@ it('ignores an older suggestions response after a rapid project switch', async (
     </MemoryRouter>,
   )
 
-  await screen.findByRole('option', { name: '书剑恩仇录' })
-  await user.selectOptions(screen.getByRole('combobox', { name: '当前项目' }), 'project-shujian')
+  await user.click(await screen.findByRole('button', { name: '当前项目' }))
+  await user.click(screen.getByRole('option', { name: '书剑恩仇录' }))
   expect(await screen.findByRole('button', { name: '陈家洛属于哪个门派？' })).toBeVisible()
 
   await act(async () => {

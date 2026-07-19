@@ -123,11 +123,11 @@ describe('App', () => {
     const user = userEvent.setup()
 
     render(<App />)
-    await waitFor(() => expect(screen.getByLabelText('当前项目')).toHaveValue('project-16'))
+    await waitFor(() => expect(screen.getByRole('button', { name: '当前项目' })).toHaveTextContent('笑傲江湖16'))
     await user.click(screen.getByRole('link', { name: '问答' }))
 
     expect(window.location.pathname).toBe('/ask')
     expect(window.location.search).toBe('?project=project-16')
-    expect(screen.getByLabelText('当前项目')).toHaveValue('project-16')
+    expect(screen.getByRole('button', { name: '当前项目' })).toHaveTextContent('笑傲江湖16')
   })
 })

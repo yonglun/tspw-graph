@@ -230,11 +230,19 @@ select:focus-visible {
   font-size: 12px;
 }
 
-.project-switcher select {
+.viewport-listbox {
+  min-width: 0;
+}
+
+.viewport-listbox__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   height: 32px;
   min-width: 0;
-  padding: 0 28px 0 12px;
+  padding: 0 10px 0 12px;
   border: 0;
   border-radius: var(--ds-radius);
   background: var(--ds-background-elevated);
@@ -242,6 +250,70 @@ select:focus-visible {
   box-shadow: var(--ds-shadow-border);
   font-size: 13px;
   font-weight: 400;
+  cursor: pointer;
+}
+
+.viewport-listbox__trigger:hover:not(:disabled) {
+  background: var(--ds-background-hover);
+}
+
+.viewport-listbox__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+
+.viewport-listbox__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewport-listbox__menu {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ds-background-elevated);
+  color: var(--ds-text-primary);
+  box-shadow: var(--ds-shadow-menu);
+}
+
+.viewport-listbox__option {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 8px;
+  border-radius: var(--ds-radius);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.viewport-listbox__option[data-active] {
+  background: var(--ds-background-hover);
+}
+
+.viewport-listbox__option:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ds-interactive);
+}
+
+.viewport-listbox__option > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewport-listbox__check {
+  color: var(--ds-text-primary);
+  text-align: center;
 }
 
 /* Reading surfaces */
@@ -1838,7 +1910,7 @@ select:focus-visible {
 
 .build-upload :disabled,
 .attribute-backfill :disabled,
-.project-switcher select:disabled {
+.viewport-listbox__trigger:disabled {
   cursor: not-allowed;
   color: var(--ds-text-muted);
 }

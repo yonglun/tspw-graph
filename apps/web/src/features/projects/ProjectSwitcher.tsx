@@ -1,7 +1,11 @@
+import { useLocation } from 'react-router-dom'
+
 import { useProject } from '../../app/ProjectContext'
 import { DEFAULT_PROJECT_ID } from '../../api/client'
+import { ViewportListbox } from './ViewportListbox'
 
 export function ProjectSwitcher() {
+  const location = useLocation()
   const {
     projects,
     projectId,
@@ -10,5 +14,22 @@ export function ProjectSwitcher() {
   } = useProject()
   const userProjects = projects.filter(item => !item.is_builtin)
   const visibleProjects = userProjects.length > 0 ? userProjects : projects
-  return <label className="project-switcher"><span>当前项目</span><select aria-label="当前项目" value={projectId} disabled={projectSwitchLocked} title={projectSwitchLocked ? '构建完成前不能切换项目' : undefined} onChange={event => setProjectId(event.target.value)}>{visibleProjects.length === 0 && <option value={DEFAULT_PROJECT_ID}>笑傲江湖</option>}{visibleProjects.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+  const options = visibleProjects.length > 0
+    ? visibleProjects.map(item => ({ value: item.id, label: item.title }))
+    : [{ value: DEFAULT_PROJECT_ID, label: '笑傲江湖' }]
+
+  return (
+    <div className="project-switcher">
+      <span>当前项目</span>
+      <ViewportListbox
+        label="当前项目"
+        value={projectId}
+        options={options}
+        disabled={projectSwitchLocked}
+        disabledTitle="构建完成前不能切换项目"
+        dismissSignal={`${location.pathname}${location.search}`}
+        onChange={setProjectId}
+      />
+    </div>
+  )
 }

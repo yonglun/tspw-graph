@@ -419,7 +419,8 @@ describe('GraphPage', () => {
     await user.click(await screen.findByRole('button', { name: /令狐沖/ }))
     expect(await screen.findByText('岳不群')).toBeVisible()
 
-    await user.selectOptions(screen.getByLabelText('当前项目'), 'p-2')
+    await user.click(screen.getByRole('button', { name: '当前项目' }))
+    await user.click(screen.getByRole('option', { name: '项目二' }))
 
     expect(await screen.findByText('风清扬')).toBeVisible()
     expect(screen.queryByText('岳不群')).not.toBeInTheDocument()
@@ -457,7 +458,8 @@ describe('GraphPage', () => {
     expect(await screen.findByText('岳不群')).toBeVisible()
     expect(await screen.findByRole('heading', { name: '令狐沖' })).toBeVisible()
 
-    await user.selectOptions(screen.getByLabelText('当前项目'), 'p-2')
+    await user.click(screen.getByRole('button', { name: '当前项目' }))
+    await user.click(screen.getByRole('option', { name: '项目二' }))
 
     expect(screen.queryByText('岳不群')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '令狐沖' })).not.toBeInTheDocument()

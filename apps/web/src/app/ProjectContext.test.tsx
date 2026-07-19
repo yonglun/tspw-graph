@@ -24,7 +24,9 @@ it('prefers the first user project over the builtin demo project', async () => {
   render(<MemoryRouter initialEntries={['/graph?project=xiaoao']}><ProjectProvider><Probe /><ProjectSwitcher /></ProjectProvider></MemoryRouter>)
 
   expect(await screen.findByText('project-full')).toBeVisible()
-  expect(screen.getByLabelText('当前项目')).toHaveValue('project-full')
+  const switcher = screen.getByRole('button', { name: '当前项目' })
+  expect(switcher).toHaveTextContent('笑傲江湖完整版')
+  await userEvent.setup().click(switcher)
   expect(screen.getByRole('option', { name: '笑傲江湖完整版' })).toBeInTheDocument()
   expect(screen.queryByRole('option', { name: '笑傲江湖' })).not.toBeInTheDocument()
 })
@@ -41,7 +43,8 @@ it('removes an entity deep link when switching projects', async () => {
     </MemoryRouter>,
   )
 
-  await user.selectOptions(await screen.findByLabelText('当前项目'), 'project-2')
+  await user.click(await screen.findByRole('button', { name: '当前项目' }))
+  await user.click(screen.getByRole('option', { name: '项目二' }))
 
   expect(screen.getByTestId('location')).toHaveTextContent('?project=project-2')
   expect(screen.getByTestId('location')).not.toHaveTextContent('entity=')
